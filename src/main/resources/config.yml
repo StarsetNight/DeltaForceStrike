@@ -100,6 +100,23 @@ bomb:
       z: -40.5
       radius: 6.0
 
+grenade:
+  smoke:
+    duration-ticks: 160   # 8 秒
+    radius: 4.0
+    apply-darkness: false # true 则云内短暂黑暗，遮挡更强
+  wither:
+    duration-ticks: 120   # 6 秒
+    radius: 3.0
+    amplifier: 0          # 0 = 凋零 I
+  incendiary:
+    radius: 4.5
+    damage: 4.0           # 约 2 心，边缘衰减
+    knockback-horizontal: 2.2
+    knockback-vertical: 0.85
+    self-damage: false    # false=不伤自己但仍击退
+    place-fire: false
+
 # ---------- 出生点（务必用 /dfs setspawn 写入真实坐标）----------
 # 若仍为示例值，请站在安全方块上执行:
 #   /dfs setspawn queue
