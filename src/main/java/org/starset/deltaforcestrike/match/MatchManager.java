@@ -2,9 +2,12 @@ package org.starset.deltaforcestrike.match;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
@@ -12,18 +15,18 @@ import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.round.RoundState;
 import org.starset.deltaforcestrike.util.ArenaCleanup;
 import org.starset.deltaforcestrike.util.ConfigKeys;
+import org.starset.deltaforcestrike.util.GameGuide;
+import org.starset.deltaforcestrike.util.TeamSelectUI;
 import org.starset.deltaforcestrike.util.Worlds;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * 全服唯一对局。
- * 仅处理竞技世界（config: world.arena，默认 delta_force_strike）。
- * <p>
- * WAITING → COUNTDOWN（选队）→ AGENT_SELECT（可关）→ IN_PROGRESS → ENDING → WAITING
+ * WAITING → COUNTDOWN → AGENT_SELECT(可关) → IN_PROGRESS → ENDING → WAITING
  */
 public class MatchManager {
 
@@ -35,6 +38,9 @@ public class MatchManager {
 
     private BukkitTask agentTask;
     private int agentLeft;
+
+    /** 对局结束后延迟回队列（tick），便于看完 Title */
+    private static final long END_RESET_DELAY_TICKS = 70L; // 3.5s
 
     public MatchManager(DeltaForceStrike plugin) {
         this.plugin = plugin;
@@ -78,9 +84,6 @@ public class MatchManager {
                 && match.getRoundManager().getState() == RoundState.COMBAT;
     }
 
-    /**
-     * 是否禁止新人加入。
-     */
     public boolean isJoinLocked() {
         if (match == null) {
             return false;
@@ -91,15 +94,12 @@ public class MatchManager {
                 || s == MatchState.ENDING) {
             return true;
         }
-        if (s == MatchState.COUNTDOWN
-                && plugin.getConfig().getBoolean("queue.lock-during-countdown", true)) {
-            return true;
-        }
-        return false;
+        return s == MatchState.COUNTDOWN
+                && plugin.getConfig().getBoolean("queue.lock-during-countdown", true);
     }
 
     // =====================================================================
-    // 进竞技世界 / 入队
+    // 入队 / 离队
     // =====================================================================
 
     public void handleEnterArena(Player player) {
@@ -127,6 +127,11 @@ public class MatchManager {
         }
 
         if (match == null || match.getState() == MatchState.ENDING) {
+            // ENDING 延迟重置期间暂不可进，避免脏状态
+            if (match != null && match.getState() == MatchState.ENDING) {
+                player.sendMessage("§c[DFS] 对局正在结算，请稍候…");
+                return false;
+            }
             resetMatchWaiting();
         }
 
@@ -142,8 +147,7 @@ public class MatchManager {
         }
 
         int startMoney = plugin.getConfig().getInt("economy.start-money", 800);
-        PlayerSession session = new PlayerSession(player, startMoney);
-        match.getSessions().put(player.getUniqueId(), session);
+        match.getSessions().put(player.getUniqueId(), new PlayerSession(player, startMoney));
 
         player.setGameMode(GameMode.ADVENTURE);
         player.setFallDistance(0f);
@@ -161,6 +165,18 @@ public class MatchManager {
         sendQueueActionBar();
         safeScoreboardUpdateAll();
         safeTabUpdateAll();
+
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (!player.isOnline() || !isInMatch(player) || match == null) {
+                return;
+            }
+            MatchState st = match.getState();
+            if (st == MatchState.WAITING || st == MatchState.COUNTDOWN) {
+                GameGuide.sendOnJoin(player);
+                TeamSelectUI.send(player);
+            }
+        }, 10L);
+
         checkAutoStart();
         return true;
     }
@@ -180,6 +196,7 @@ public class MatchManager {
         match.getSessions().remove(player.getUniqueId());
         safeScoreboardRemove(player);
         safeTabReset(player);
+        safeSpectatorClear(player);
 
         player.setInvulnerable(false);
         match.broadcast("§e[DFS] §f" + player.getName() + " §7已离开。 §8(" + match.size() + ")");
@@ -207,26 +224,25 @@ public class MatchManager {
     }
 
     // =====================================================================
-    // 满人 → 倒计时
+    // 倒计时
     // =====================================================================
 
     private void checkAutoStart() {
         if (match == null || match.getState() != MatchState.WAITING) {
             return;
         }
-        int max = ConfigKeys.maxPlayers();
-        if (match.size() >= max) {
+        if (match.size() >= ConfigKeys.maxPlayers()) {
             startCountdown();
         }
     }
 
-    /** 管理员强制进入倒计时 */
     public void forceStartCountdown() {
         if (match == null) {
             resetMatchWaiting();
         }
         if (match.getState() == MatchState.IN_PROGRESS
-                || match.getState() == MatchState.AGENT_SELECT) {
+                || match.getState() == MatchState.AGENT_SELECT
+                || match.getState() == MatchState.ENDING) {
             return;
         }
         if (match.size() < 1) {
@@ -249,7 +265,9 @@ public class MatchManager {
         countdownLeft = plugin.getConfig().getInt("queue.countdown-seconds", 30);
 
         match.broadcast("§6[DFS] §e准备开始！§f" + countdownLeft
-                + " §e秒。使用 §a/dfs team t §e或 §b/dfs team ct §e选择队伍。");
+                + " §e秒。点击聊天栏选边，或 §a/dfs team t§e / §b/dfs team ct");
+
+        TeamSelectUI.broadcast(match);
         safeScoreboardUpdateAll();
         safeTabUpdateAll();
 
@@ -260,14 +278,11 @@ public class MatchManager {
             }
 
             int max = ConfigKeys.maxPlayers();
-            boolean cancelIfNotFull = plugin.getConfig()
-                    .getBoolean("queue.cancel-if-not-full", true);
-
-            if (cancelIfNotFull && match.size() < max) {
+            if (plugin.getConfig().getBoolean("queue.cancel-if-not-full", true)
+                    && match.size() < max) {
                 cancelCountdown("有人离开或人数不足，倒计时取消。");
                 return;
             }
-
             if (match.size() < 1) {
                 cancelCountdown("队列为空，倒计时取消。");
                 return;
@@ -285,6 +300,16 @@ public class MatchManager {
                     || countdownLeft == 30
                     || countdownLeft % 15 == 0) {
                 match.broadcast("§e[DFS] 游戏将在 §c" + countdownLeft + " §e秒后开始…");
+            }
+
+            List<Integer> reminds = plugin.getConfig()
+                    .getIntegerList("queue.team-click-remind-seconds");
+            if (reminds == null || reminds.isEmpty()) {
+                if (countdownLeft == 15 || countdownLeft == 10) {
+                    TeamSelectUI.broadcast(match);
+                }
+            } else if (reminds.contains(countdownLeft)) {
+                TeamSelectUI.broadcast(match);
             }
 
             sendQueueActionBar();
@@ -326,15 +351,13 @@ public class MatchManager {
     }
 
     // =====================================================================
-    // 干员选择 / 开打
+    // 干员 / 开打
     // =====================================================================
 
     private void beginAgentOrGame() {
         balanceTeamsIfNeeded();
-
         boolean opEnabled = plugin.getConfig().getBoolean("operator.enabled", true);
         boolean selectEnabled = plugin.getConfig().getBoolean("operator.select-enabled", false);
-
         if (opEnabled && selectEnabled) {
             startAgentSelect();
         } else {
@@ -387,7 +410,6 @@ public class MatchManager {
             player.sendMessage("§c[DFS] 干员选择暂未开放。");
             return false;
         }
-
         PlayerSession s = match.getSession(player.getUniqueId());
         if (s == null) {
             return false;
@@ -427,23 +449,30 @@ public class MatchManager {
 
         if (self.getTeam() == team) {
             player.sendMessage("§7你已在该队伍。");
+            TeamSelectUI.sendSelected(player, team);
             return true;
         }
 
-        long count = match.countTeam(team);
-        if (count >= teamSize) {
+        if (match.countTeam(team) >= teamSize) {
             player.sendMessage("§c[DFS] 该队伍已满（" + teamSize + "）。");
+            TeamSelectUI.send(player);
             return false;
         }
 
         self.setTeam(team);
-        player.sendMessage(team == Team.T
-                ? "§a[DFS] 已加入 §c进攻方 T"
-                : "§a[DFS] 已加入 §b防守方 CT");
+        TeamSelectUI.sendSelected(player, team);
+
         match.broadcast("§7" + player.getName() + " → "
                 + (team == Team.T ? "§cT" : "§bCT")
                 + " §8(T " + match.countTeam(Team.T)
                 + " / CT " + match.countTeam(Team.CT) + ")");
+
+        for (Player p : match.onlinePlayers()) {
+            PlayerSession s = match.getSession(p.getUniqueId());
+            if (s != null && !s.hasTeam()) {
+                TeamSelectUI.send(p);
+            }
+        }
 
         sendQueueActionBar();
         safeScoreboardUpdateAll();
@@ -455,9 +484,7 @@ public class MatchManager {
         if (match == null) {
             return;
         }
-
         int teamSize = ConfigKeys.teamSize();
-
         for (PlayerSession s : match.getSessions().values()) {
             if (s.hasTeam()) {
                 continue;
@@ -472,7 +499,6 @@ public class MatchManager {
                 s.setTeam(t <= ct ? Team.T : Team.CT);
             }
         }
-
         rebalanceOverflow(teamSize);
     }
 
@@ -480,15 +506,12 @@ public class MatchManager {
         if (match == null) {
             return;
         }
-
         List<PlayerSession> all = new ArrayList<>(match.getSessions().values());
         long t = match.countTeam(Team.T);
         long ct = match.countTeam(Team.CT);
-
         if (all.size() == teamSize * 2 && t == teamSize && ct == teamSize) {
             return;
         }
-
         Collections.shuffle(all);
         if (all.size() == teamSize * 2) {
             for (int i = 0; i < all.size(); i++) {
@@ -496,14 +519,13 @@ public class MatchManager {
             }
             return;
         }
-
         for (int i = 0; i < all.size(); i++) {
             all.get(i).setTeam(i % 2 == 0 ? Team.T : Team.CT);
         }
     }
 
     // =====================================================================
-    // 正式开打 / 结束
+    // 开打 / 结束
     // =====================================================================
 
     public void startGame() {
@@ -521,10 +543,12 @@ public class MatchManager {
         match.setState(MatchState.IN_PROGRESS);
         match.setCurrentRound(0);
         match.broadcast("§a§l[DFS] 对局开始！");
+        match.broadcast("§e提示: T 包点右键下包 · CT 潜行拆包 · §a/dfs guide §e· §a/dfs shop");
 
         for (Player p : match.onlinePlayers()) {
             p.setInvulnerable(false);
             p.setFallDistance(0f);
+            safeSpectatorClear(p);
         }
 
         safeScoreboardUpdateAll();
@@ -532,9 +556,17 @@ public class MatchManager {
         match.getRoundManager().startNextRound();
     }
 
+    /**
+     * 整局结束：先 Title（胜利/战败/平局 + 比分），再延迟回队列。
+     */
     public void forceEnd(String reason) {
         cancelTasks();
         if (match == null) {
+            return;
+        }
+
+        // 避免重复 forceEnd
+        if (match.getState() == MatchState.ENDING) {
             return;
         }
 
@@ -545,54 +577,140 @@ public class MatchManager {
         }
         ArenaCleanup.clearDrops();
 
-        match.broadcast("§c[DFS] 对局结束: " + reason);
+        final int finalT = match.getScoreT();
+        final int finalCT = match.getScoreCT();
+        final String reasonText = reason == null ? "" : reason;
+
+        // ★ 整局胜负 Title（session 仍在）
+        showMatchEndTitles(finalT, finalCT);
+
+        match.broadcast("§c[DFS] 对局结束: §f" + reasonText);
+        match.broadcast("§6最终比分 §cT " + finalT + " §7- §b" + finalCT + " CT");
 
         List<Player> stillHere = new ArrayList<>(match.onlinePlayers());
 
-        for (Player p : stillHere) {
-            p.setInvulnerable(false);
-            p.setGameMode(GameMode.ADVENTURE);
-            p.getInventory().clear();
-            p.setFallDistance(0f);
-            teleportQueue(p);
-            plugin.getGameRulesService().fillHealth(p);
-            plugin.getGameRulesService().fillFood(p);
-            safeScoreboardRemove(p);
-            safeTabReset(p);
+        long delay = plugin.getConfig().getLong("match.end-title-delay-ticks", END_RESET_DELAY_TICKS);
+
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            for (Player p : stillHere) {
+                if (!p.isOnline()) {
+                    continue;
+                }
+                p.setInvulnerable(false);
+                safeSpectatorClear(p);
+                p.setGameMode(GameMode.ADVENTURE);
+                p.getInventory().clear();
+                p.getInventory().setHelmet(null);
+                p.getInventory().setChestplate(null);
+                p.getInventory().setLeggings(null);
+                p.getInventory().setBoots(null);
+                p.getInventory().setItemInOffHand(null);
+                p.setFallDistance(0f);
+                teleportQueue(p);
+                plugin.getGameRulesService().fillHealth(p);
+                plugin.getGameRulesService().fillFood(p);
+                safeScoreboardRemove(p);
+                safeTabReset(p);
+            }
+
+            safeScoreboardRemoveAll();
+            resetMatchWaiting();
+
+            for (Player p : stillHere) {
+                if (p.isOnline() && Worlds.isArena(p)) {
+                    tryJoin(p);
+                }
+            }
+        }, Math.max(20L, delay));
+    }
+
+    /**
+     * 主标题：胜利 / 战败 / 平局
+     * 副标题：比分 T x - y CT
+     * 使用纯 Adventure，无 § 混入 Component.text
+     */
+    private void showMatchEndTitles(int scoreT, int scoreCT) {
+        if (match == null) {
+            return;
         }
 
-        safeScoreboardRemoveAll();
-        resetMatchWaiting();
+        Team winner;
+        if (scoreT > scoreCT) {
+            winner = Team.T;
+        } else if (scoreCT > scoreT) {
+            winner = Team.CT;
+        } else {
+            winner = Team.NONE;
+        }
 
-        for (Player p : stillHere) {
-            if (p.isOnline() && Worlds.isArena(p)) {
-                tryJoin(p);
+        Title.Times times = Title.Times.times(
+                Duration.ofMillis(200),
+                Duration.ofSeconds(4),
+                Duration.ofMillis(800)
+        );
+
+        Component scoreSub = Component.text("比分 ", NamedTextColor.GRAY)
+                .append(Component.text("T " + scoreT, NamedTextColor.RED))
+                .append(Component.text(" - ", NamedTextColor.DARK_GRAY))
+                .append(Component.text(scoreCT + " CT", NamedTextColor.AQUA));
+
+        Component winMain = Component.text("胜利", NamedTextColor.GREEN, TextDecoration.BOLD);
+        Component loseMain = Component.text("战败", NamedTextColor.RED, TextDecoration.BOLD);
+        Component drawMain = Component.text("平局", NamedTextColor.YELLOW, TextDecoration.BOLD);
+        Component endMain = Component.text("对局结束", NamedTextColor.GOLD, TextDecoration.BOLD);
+
+        for (Player p : match.onlinePlayers()) {
+            PlayerSession s = match.getSession(p.getUniqueId());
+
+            if (winner == Team.NONE) {
+                p.showTitle(Title.title(drawMain, scoreSub, times));
+                p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1f, 1f);
+                continue;
+            }
+
+            if (s == null || !s.hasTeam()) {
+                p.showTitle(Title.title(endMain, scoreSub, times));
+                continue;
+            }
+
+            if (s.getTeam() == winner) {
+                p.showTitle(Title.title(winMain, scoreSub, times));
+                p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1f, 1.1f);
+            } else {
+                p.showTitle(Title.title(loseMain, scoreSub, times));
+                p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.9f, 0.8f);
             }
         }
     }
 
-    /**
-     * 战斗阶段淘汰（致死旁观后由 GameRulesListener 调用）。
-     */
     public void onPlayerEliminated(Player victim, Player killer) {
         if (match == null || match.getState() != MatchState.IN_PROGRESS) {
             return;
         }
 
         PlayerSession vs = match.getSession(victim.getUniqueId());
-        if (vs != null) {
-            vs.setAlive(false);
-            vs.addDeath();
+        if (vs == null) {
+            return;
         }
 
-        if (killer != null) {
-            PlayerSession ks = match.getSession(killer.getUniqueId());
-            if (ks != null && match.contains(killer.getUniqueId())) {
-                if (vs == null || vs.getTeam() != ks.getTeam()) {
+        if (vs.markDeathCounted()) {
+            vs.addDeath();
+            vs.setAlive(false);
+
+            if (killer != null) {
+                PlayerSession ks = match.getSession(killer.getUniqueId());
+                if (ks != null
+                        && match.contains(killer.getUniqueId())
+                        && vs.getTeam() != ks.getTeam()) {
                     ks.addKill();
                     ks.addMoney(plugin.getConfig().getInt("economy.kill-reward", 300));
                 }
             }
+        }
+
+        if (plugin.getSpectatorLockService() != null) {
+            Bukkit.getScheduler().runTask(plugin, () ->
+                    plugin.getSpectatorLockService().onEnterSpectator(victim));
         }
 
         safeScoreboardUpdateAll();
@@ -647,7 +765,7 @@ public class MatchManager {
     }
 
     // =====================================================================
-    // 计分板 / Tab 安全调用
+    // UI 安全调用
     // =====================================================================
 
     private void safeScoreboardCreate(Player player) {
@@ -730,8 +848,21 @@ public class MatchManager {
         }
     }
 
+    private void safeSpectatorClear(Player player) {
+        try {
+            if (plugin.getSpectatorLockService() != null) {
+                plugin.getSpectatorLockService().clear(player);
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            player.setSpectatorTarget(null);
+        } catch (Throwable ignored) {
+        }
+    }
+
     // =====================================================================
-    // 任务 / 关闭 / 状态
+    // 关闭 / 状态
     // =====================================================================
 
     private void cancelTasks() {

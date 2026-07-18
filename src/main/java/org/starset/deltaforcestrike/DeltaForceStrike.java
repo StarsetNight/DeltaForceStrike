@@ -10,20 +10,13 @@ import org.starset.deltaforcestrike.game.GameRulesService;
 import org.starset.deltaforcestrike.grenade.GrenadeService;
 import org.starset.deltaforcestrike.item.ItemGiveService;
 import org.starset.deltaforcestrike.item.ItemManager;
-import org.starset.deltaforcestrike.listener.ArenaPlayerListener;
-import org.starset.deltaforcestrike.listener.BombListener;
-import org.starset.deltaforcestrike.listener.BuyZoneListener;
-import org.starset.deltaforcestrike.listener.GameModeLockListener;
-import org.starset.deltaforcestrike.listener.GameRulesListener;
-import org.starset.deltaforcestrike.listener.GrenadeListener;
-import org.starset.deltaforcestrike.listener.InventoryLockListener;
-import org.starset.deltaforcestrike.listener.ItemProtectListener;
-import org.starset.deltaforcestrike.listener.PickupListener;
+import org.starset.deltaforcestrike.listener.*;
 import org.starset.deltaforcestrike.manager.GameManager;
 import org.starset.deltaforcestrike.match.MatchManager;
 import org.starset.deltaforcestrike.scoreboard.GameScoreboard;
 import org.starset.deltaforcestrike.scoreboard.TabListService;
 import org.starset.deltaforcestrike.shop.ShopListener;
+import org.starset.deltaforcestrike.spectator.SpectatorLockService;
 import org.starset.deltaforcestrike.util.Worlds;
 
 /**
@@ -43,6 +36,7 @@ public final class DeltaForceStrike extends JavaPlugin {
     private BombManager bombManager;
     private GrenadeService grenadeService;
     private InventoryLockListener inventoryLockListener;
+    private SpectatorLockService spectatorLockService;
 
     @Override
     public void onEnable() {
@@ -67,6 +61,7 @@ public final class DeltaForceStrike extends JavaPlugin {
         scoreboardService = new GameScoreboard(this);
         tabListService = new TabListService(this);
         gameManager = new GameManager(this);
+        spectatorLockService = new SpectatorLockService(this);
 
         // ---------- 命令 ----------
         PluginCommand dfs = getCommand("dfs");
@@ -91,6 +86,8 @@ public final class DeltaForceStrike extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new BombListener(this), this);
         getServer().getPluginManager().registerEvents(new ShopListener(this), this);
         getServer().getPluginManager().registerEvents(new GrenadeListener(this, grenadeService), this);
+        getServer().getPluginManager().registerEvents(
+                new SpectatorLockListener(this, spectatorLockService), this);
 
         // ---------- 定时任务 ----------
         // 物品栏清扫（仅竞技世界内在局玩家）
@@ -107,6 +104,9 @@ public final class DeltaForceStrike extends JavaPlugin {
 
         // 计分板刷新
         getServer().getScheduler().runTaskTimer(this, scoreboardService::tick, 20L, 20L);
+
+        getServer().getScheduler().runTaskTimer(this,
+                () -> spectatorLockService.tickAll(), 20L, 10L);
 
         getLogger().info("DeltaForceStrike v" + getPluginMeta().getVersion() + " 已启动");
         getLogger().info("竞技世界: " + Worlds.arenaName()
@@ -173,5 +173,9 @@ public final class DeltaForceStrike extends JavaPlugin {
 
     public InventoryLockListener getInventoryLockListener() {
         return inventoryLockListener;
+    }
+
+    public SpectatorLockService getSpectatorLockService() {
+        return spectatorLockService;
     }
 }

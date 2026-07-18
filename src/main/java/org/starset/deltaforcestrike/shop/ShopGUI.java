@@ -16,8 +16,10 @@ import org.starset.deltaforcestrike.item.ItemManager;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.round.RoundState;
+import org.starset.deltaforcestrike.util.ConfigKeys;
 
 import java.util.List;
+import java.util.Locale;
 
 public final class ShopGUI {
 
@@ -37,13 +39,16 @@ public final class ShopGUI {
             return;
         }
         PlayerSession session = match.getSession(player.getUniqueId());
-        if (session == null) return;
+        if (session == null) {
+            return;
+        }
 
         ShopHolder holder = new ShopHolder();
         Inventory inv = Bukkit.createInventory(holder, 54, TITLE);
         holder.setInventory(inv);
 
         ItemManager im = plugin.getItemManager();
+
         place(inv, im, 0, "weapons.standard", "standard");
         place(inv, im, 9, "weapons.dragon", "dragon");
         place(inv, im, 18, "weapons.revolt", "revolt");
@@ -62,15 +67,20 @@ public final class ShopGUI {
         place(inv, im, 29, "bomb.defuse-kit", "defuse-kit");
         place(inv, im, 38, "skill-charge.charge", "charge");
 
-        place(inv, im, 3, "equipments.leather-armor", "leather-armor");
+        // 轻型 = 锁链；重型 = 铁
+        place(inv, im, 3, "equipments.leather-armor", "leather-armor", "chain-armor");
         place(inv, im, 12, "equipments.iron-armor", "iron-armor");
+
+        if (ConfigKeys.shieldEnabled()) {
+            place(inv, im, 21, "equipments.shield", "shield");
+        }
 
         ItemStack info = new ItemStack(Material.GOLD_INGOT);
         ItemMeta meta = info.getItemMeta();
         meta.displayName(Component.text("资金: $" + session.getMoney(), NamedTextColor.GOLD));
         meta.lore(List.of(
                 Component.text("点击商品购买", NamedTextColor.GRAY),
-                Component.text("仅购买阶段", NamedTextColor.DARK_GRAY)
+                Component.text("轻型护甲 = 锁链套", NamedTextColor.DARK_GRAY)
         ));
         info.setItemMeta(meta);
         inv.setItem(49, info);
@@ -88,18 +98,31 @@ public final class ShopGUI {
                 break;
             }
         }
-        if (gi == null || used == null) return;
+        if (gi == null || used == null) {
+            return;
+        }
+
+        if (!ConfigKeys.shieldEnabled()) {
+            String t = gi.getType() == null ? "" : gi.getType().toLowerCase(Locale.ROOT);
+            if (t.equals("shield") || used.toLowerCase(Locale.ROOT).contains("shield")) {
+                return;
+            }
+        }
 
         ItemStack icon;
         if (gi.isArmorSet()) {
-            icon = new ItemStack(used.contains("iron") ? Material.IRON_CHESTPLATE : Material.LEATHER_CHESTPLATE);
+            String u = used.toLowerCase(Locale.ROOT);
+            boolean iron = u.contains("iron");
+            icon = new ItemStack(iron ? Material.IRON_CHESTPLATE : Material.CHAINMAIL_CHESTPLATE);
         } else {
             icon = im.createItem(used);
             if (icon == null && gi.getMaterial() != null) {
                 icon = new ItemStack(gi.getMaterial());
             }
         }
-        if (icon == null) return;
+        if (icon == null) {
+            return;
+        }
 
         ItemMeta meta = icon.getItemMeta();
         if (meta != null) {

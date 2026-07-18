@@ -33,8 +33,17 @@ public final class ConfigKeys {
         return Math.max(1.0, cfg().getDouble("round.buy-zone-radius", 5.0));
     }
 
+    /** 是否启用守护盾系统 */
+    public static boolean shieldEnabled() {
+        return cfg().getBoolean("player.shield-enabled", false);
+    }
+
+    public static int arrowsPerRanged() {
+        return Math.max(1, cfg().getInt("shop.arrows-per-ranged", 15));
+    }
+
     /**
-     * 读取 locations.xxx；缺键返回 null（不用 0,64,0 默认摔死）。
+     * 读取 locations.xxx；缺键返回 null。
      */
     public static Location readLocation(String node) {
         FileConfiguration c = cfg();

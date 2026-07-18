@@ -30,6 +30,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * 改造 TNT：包点安装 / 引信读秒 / 拆除。
+ * 引信：fuseLeft 为剩余整秒；每 20 tick 减 1，减到 0 当帧 explode（显示 1 的那一秒结束后立刻炸）。
+ */
 public class BombManager {
 
     private final DeltaForceStrike plugin;
@@ -51,6 +55,7 @@ public class BombManager {
         return planted;
     }
 
+    /** 剩余整秒；未安包为 -1 */
     public int getFuseLeft() {
         return planted ? fuseLeft : -1;
     }
@@ -71,9 +76,9 @@ public class BombManager {
         fuseLeft = -1;
     }
 
-    // ------------------------------------------------------------------
+    // =====================================================================
     // 安装
-    // ------------------------------------------------------------------
+    // =====================================================================
 
     public boolean tryBeginPlant(Player player, Block against) {
         Match match = plugin.getMatchManager().getMatch();
@@ -94,12 +99,10 @@ public class BombManager {
             return false;
         }
 
-        // 必须在包点内
-        Location checkLoc = player.getLocation();
         Location plantLoc = against.getRelative(0, 1, 0).getLocation().add(0.5, 0, 0.5);
-        if (!BombSites.isInAnySite(checkLoc) && !BombSites.isInAnySite(plantLoc)) {
+        if (!BombSites.isInAnySite(player.getLocation()) && !BombSites.isInAnySite(plantLoc)) {
             player.sendMessage("§c只能在包点安装改造TNT！§7 包点: " + BombSites.describeSites());
-            player.sendActionBar(Component.text("§c不在包点范围内", NamedTextColor.RED));
+            player.sendActionBar(Component.text("不在包点范围内", NamedTextColor.RED));
             return true;
         }
 
@@ -143,12 +146,13 @@ public class BombManager {
         plantLocation = loc.clone();
         fuseLeft = plugin.getConfig().getInt("bomb.explosion-time", 40);
 
+        // 实体仅展示；逻辑 explode 为准。引信略长，避免原版先炸
         primed = loc.getWorld().spawn(loc, TNTPrimed.class, tnt -> {
-            tnt.setFuseTicks(fuseLeft * 20 + 20);
+            tnt.setFuseTicks((fuseLeft + 2) * 20);
             tnt.setYield(0f);
             tnt.setIsIncendiary(false);
             tnt.setSource(player);
-            tnt.customName(Component.text("改造TNT", NamedTextColor.RED));
+            tnt.customName(Component.text("改造TNT " + fuseLeft + "s", NamedTextColor.RED));
             tnt.setCustomNameVisible(true);
         });
 
@@ -161,18 +165,35 @@ public class BombManager {
         match.getRoundManager().onBombPlanted();
 
         cancelFuse();
+        /*
+         * 时间线（explosion-time=40）：
+         * t=0  安装，显示 40
+         * t=1s 40→39
+         * ...
+         * t=39s 显示 1
+         * t=40s 1→0 当帧 explode  （不会在显示 1 时再多等一整秒才炸）
+         */
         fuseTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (!planted) {
                 cancelFuse();
                 return;
             }
+
             fuseLeft--;
+
             if (fuseLeft <= 0) {
+                fuseLeft = 0;
+                if (primed != null && primed.isValid()) {
+                    primed.customName(Component.text("改造TNT 0s", NamedTextColor.RED));
+                }
                 cancelFuse();
                 explode();
                 return;
             }
+
             if (primed != null && primed.isValid()) {
+                primed.setFuseTicks(Math.max(1, fuseLeft) * 20 + 10);
+                primed.customName(Component.text("改造TNT " + fuseLeft + "s", NamedTextColor.RED));
                 primed.getWorld().spawnParticle(
                         Particle.SMOKE, primed.getLocation(), 5, 0.2, 0.2, 0.2, 0.01);
             }
@@ -192,15 +213,14 @@ public class BombManager {
 
         if (loc != null && loc.getWorld() != null) {
             try {
-                loc.getWorld().spawnParticle(Particle.EXPLOSION_EMITTER, loc, 2);
+                loc.getWorld().spawnParticle(Particle.EXPLOSION_EMITTER, loc, 3);
             } catch (Throwable t) {
-                loc.getWorld().spawnParticle(Particle.EXPLOSION, loc, 3);
+                loc.getWorld().spawnParticle(Particle.EXPLOSION, loc, 4);
             }
             loc.getWorld().playSound(loc, Sound.ENTITY_GENERIC_EXPLODE, 2.5f, 0.7f);
 
-            double radius = plugin.getConfig().getDouble("bomb.damage-radius", 12.0);
-            double maxDamage = plugin.getConfig().getDouble("bomb.damage", 30.0);
-            boolean falloff = plugin.getConfig().getBoolean("bomb.damage-falloff", true);
+            double radius = plugin.getConfig().getDouble("bomb.damage-radius", 18.0);
+            double maxDamage = plugin.getConfig().getDouble("bomb.damage", 36.0);
 
             for (Player p : loc.getWorld().getPlayers()) {
                 if (!plugin.getMatchManager().isInMatch(p)) {
@@ -219,21 +239,23 @@ public class BombManager {
                     continue;
                 }
 
-                double dmg = maxDamage;
-                if (falloff && radius > 0) {
-                    dmg = maxDamage * (1.0 - dist / radius);
-                    dmg = Math.max(6.0, dmg);
+                double dmg = damageByDistance(dist, radius, maxDamage);
+                if (dmg <= 0) {
+                    continue;
                 }
 
                 p.damage(dmg);
                 try {
                     Vector knock = p.getLocation().toVector().subtract(loc.toVector());
-                    if (knock.lengthSquared() > 0.01) {
-                        knock.normalize().multiply(1.35).setY(0.45);
-                        p.setVelocity(knock);
+                    if (knock.lengthSquared() < 0.01) {
+                        knock = p.getLocation().getDirection().multiply(-1);
                     }
+                    knock.normalize();
+                    double kbScale = Math.max(0.25, 1.0 - dist / radius);
+                    p.setVelocity(knock.multiply(1.5 * kbScale).setY(0.35 + 0.4 * kbScale));
                 } catch (Throwable ignored) {
                 }
+                p.setFallDistance(0f);
             }
         }
 
@@ -248,9 +270,30 @@ public class BombManager {
         }
     }
 
-    // ------------------------------------------------------------------
+    /** 0-20% 100% | 20-40% 75% | 40-60% 50% | 60-80% 30% | 80-100% 15% */
+    private double damageByDistance(double dist, double radius, double maxDamage) {
+        if (radius <= 0 || dist > radius) {
+            return 0;
+        }
+        double ratio = dist / radius;
+        double mult;
+        if (ratio <= 0.20) {
+            mult = 1.00;
+        } else if (ratio <= 0.40) {
+            mult = 0.75;
+        } else if (ratio <= 0.60) {
+            mult = 0.50;
+        } else if (ratio <= 0.80) {
+            mult = 0.30;
+        } else {
+            mult = 0.15;
+        }
+        return Math.max(2.0, maxDamage * mult);
+    }
+
+    // =====================================================================
     // 拆除
-    // ------------------------------------------------------------------
+    // =====================================================================
 
     public boolean tryBeginDefuse(Player player) {
         Match match = plugin.getMatchManager().getMatch();
@@ -323,9 +366,9 @@ public class BombManager {
         match.getRoundManager().endRound(Team.CT, "拆除炸弹");
     }
 
-    // ------------------------------------------------------------------
+    // =====================================================================
     // 读条
-    // ------------------------------------------------------------------
+    // =====================================================================
 
     private void startChannel(Player player, int seconds, Component barName, Runnable onDone) {
         cancelChannel(player);

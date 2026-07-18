@@ -6,6 +6,7 @@ public final class InventorySlots {
 
     public static final int MELEE = 0;
     public static final int RANGED = 1;
+    /** 热键第 3 格：T=改造TNT / CT=拆除钳 */
     public static final int BOMB = 2;
     public static final int UTIL_1 = 3;
     public static final int UTIL_2 = 4;
@@ -35,7 +36,7 @@ public final class InventorySlots {
             return switch (slotHint.toLowerCase()) {
                 case "melee" -> MELEE;
                 case "ranged" -> RANGED;
-                case "bomb" -> BOMB;
+                case "bomb", "defuse", "defuse-kit", "c4" -> BOMB;
                 case "utility" -> UTIL_1;
                 case "signature", "skill_signature" -> SIGNATURE;
                 case "purchasable", "skill_buy" -> PURCHASABLE;
@@ -49,11 +50,13 @@ public final class InventorySlots {
     }
 
     private static int preferredByType(String type) {
-        if (type == null) return MELEE;
+        if (type == null) {
+            return MELEE;
+        }
         return switch (type.toLowerCase()) {
             case "melee" -> MELEE;
             case "ranged" -> RANGED;
-            case "bomb" -> BOMB;
+            case "bomb", "defuse" -> BOMB;
             case "utility", "grenade" -> UTIL_1;
             case "skill", "skill_charge" -> PURCHASABLE;
             case "shield" -> -2;
@@ -64,9 +67,15 @@ public final class InventorySlots {
 
     public static boolean canPlaceInHotbar(String type, String slotHint, int hotbarSlot) {
         int preferred = preferredHotbarSlot(type, slotHint);
-        if (preferred == -2 || preferred == -3) return false;
-        if (preferred == UTIL_1) return isUtility(hotbarSlot);
-        if (preferred < 0) return isHotbar(hotbarSlot);
+        if (preferred == -2 || preferred == -3) {
+            return false;
+        }
+        if (preferred == UTIL_1) {
+            return isUtility(hotbarSlot);
+        }
+        if (preferred < 0) {
+            return isHotbar(hotbarSlot);
+        }
         return hotbarSlot == preferred;
     }
 }

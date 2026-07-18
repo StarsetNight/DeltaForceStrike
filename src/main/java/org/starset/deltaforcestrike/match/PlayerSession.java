@@ -16,6 +16,8 @@ public class PlayerSession {
     private boolean alive = true;
     private int consecutiveLosses;
     private boolean connected = true;
+    /** 本条命是否已计入死亡（防重复） */
+    private boolean deathCounted;
 
     public PlayerSession(Player player, int startMoney) {
         this.uuid = player.getUniqueId();
@@ -23,29 +25,109 @@ public class PlayerSession {
         this.money = startMoney;
     }
 
-    public UUID getUuid() { return uuid; }
-    public String getName() { return name; }
-    public Team getTeam() { return team; }
-    public void setTeam(Team team) { this.team = team == null ? Team.NONE : team; }
-    public boolean hasTeam() { return team == Team.T || team == Team.CT; }
-    public String getOperatorId() { return operatorId; }
-    public void setOperatorId(String operatorId) { this.operatorId = operatorId; }
-    public int getMoney() { return money; }
-    public void setMoney(int money) { this.money = Math.max(0, money); }
-    public void addMoney(int amount) { setMoney(this.money + amount); }
+    public UUID getUuid() {
+        return uuid;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public Team getTeam() {
+        return team;
+    }
+
+    public void setTeam(Team team) {
+        this.team = team == null ? Team.NONE : team;
+    }
+
+    public boolean hasTeam() {
+        return team == Team.T || team == Team.CT;
+    }
+
+    public String getOperatorId() {
+        return operatorId;
+    }
+
+    public void setOperatorId(String operatorId) {
+        this.operatorId = operatorId;
+    }
+
+    public int getMoney() {
+        return money;
+    }
+
+    public void setMoney(int money) {
+        this.money = Math.max(0, money);
+    }
+
+    public void addMoney(int amount) {
+        setMoney(this.money + amount);
+    }
+
     public boolean spend(int amount) {
-        if (money < amount) return false;
+        if (money < amount) {
+            return false;
+        }
         money -= amount;
         return true;
     }
-    public int getKills() { return kills; }
-    public void addKill() { kills++; }
-    public int getDeaths() { return deaths; }
-    public void addDeath() { deaths++; }
-    public boolean isAlive() { return alive; }
-    public void setAlive(boolean alive) { this.alive = alive; }
-    public int getConsecutiveLosses() { return consecutiveLosses; }
-    public void setConsecutiveLosses(int n) { this.consecutiveLosses = Math.max(0, n); }
-    public boolean isConnected() { return connected; }
-    public void setConnected(boolean connected) { this.connected = connected; }
+
+    public int getKills() {
+        return kills;
+    }
+
+    public void addKill() {
+        kills++;
+    }
+
+    public int getDeaths() {
+        return deaths;
+    }
+
+    public void addDeath() {
+        deaths++;
+    }
+
+    public boolean isAlive() {
+        return alive;
+    }
+
+    public void setAlive(boolean alive) {
+        this.alive = alive;
+        if (alive) {
+            deathCounted = false;
+        }
+    }
+
+    /**
+     * @return true 表示本次是第一次计入死亡
+     */
+    public boolean markDeathCounted() {
+        if (deathCounted) {
+            return false;
+        }
+        deathCounted = true;
+        return true;
+    }
+
+    public void resetDeathCounted() {
+        deathCounted = false;
+    }
+
+    public int getConsecutiveLosses() {
+        return consecutiveLosses;
+    }
+
+    public void setConsecutiveLosses(int n) {
+        this.consecutiveLosses = Math.max(0, n);
+    }
+
+    public boolean isConnected() {
+        return connected;
+    }
+
+    public void setConnected(boolean connected) {
+        this.connected = connected;
+    }
 }

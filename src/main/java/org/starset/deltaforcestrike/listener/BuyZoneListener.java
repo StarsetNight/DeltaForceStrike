@@ -1,6 +1,7 @@
 package org.starset.deltaforcestrike.listener;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -20,6 +21,8 @@ import org.starset.deltaforcestrike.util.Worlds;
 public class BuyZoneListener implements Listener {
 
     private final DeltaForceStrike plugin;
+    private static final LegacyComponentSerializer LEGACY =
+            LegacyComponentSerializer.legacySection();
 
     public BuyZoneListener(DeltaForceStrike plugin) {
         this.plugin = plugin;
@@ -61,7 +64,7 @@ public class BuyZoneListener implements Listener {
         event.setTo(new Location(to.getWorld(), nx, to.getY(), nz, to.getYaw(), to.getPitch()));
         player.setVelocity(new Vector(0, 0, 0));
         player.setFallDistance(0f);
-        player.sendActionBar(Component.text("§c购买阶段请留在出生点 §e" + (int) r + " §c格内"));
+        player.sendActionBar(LEGACY.deserialize("§c购买阶段请留在出生点 §e" + (int) r + " §c格内"));
     }
 
     private Location teamSpawn(Team team) {

@@ -57,6 +57,7 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             case "setspawn" -> setSpawn(sender, args);
             case "setsite" -> setSite(sender, args);
             case "help" -> help(sender);
+            case "guide" -> guide(sender);
             default -> sender.sendMessage("§c未知子命令。§7 /dfs help");
         }
         return true;
@@ -64,10 +65,18 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
 
     private void help(CommandSender sender) {
         sender.sendMessage("§6§l--- DeltaForceStrike ---");
-        sender.sendMessage("§e/dfs join|leave|team|shop|info");
+        sender.sendMessage("§e/dfs guide|join|leave|team|shop|info");
         if (sender.hasPermission("deltaforcestrike.admin")) {
             sender.sendMessage("§c/dfs start|stop|reload|give|setspawn|setsite");
         }
+    }
+
+    private void guide(CommandSender sender) {
+        if (!(sender instanceof Player p)) {
+            sender.sendMessage("§c仅玩家可用");
+            return;
+        }
+        org.starset.deltaforcestrike.util.GameGuide.send(p);
     }
 
     private void join(CommandSender sender) {

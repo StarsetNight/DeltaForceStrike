@@ -1,14 +1,8 @@
-# ============================================================
 # DeltaForceStrike - 物品配置
-# id 路径示例: weapons.dragon / grenades.smoke / bomb.plant-bomb
-# 短 id 别名由 ItemManager 自动注册（如 dragon、smoke）
-# ============================================================
+# 服务器运行目录: plugins/DeltaForceStrike/items.yml（需同步后 /dfs reload）
 
 items:
 
-  # ==================================================
-  # 武器 - 近战
-  # ==================================================
   weapons:
 
     standard:
@@ -52,10 +46,6 @@ items:
       enchantments:
         sharpness: 6
 
-    # ------------------------------------------------
-    # 武器 - 远程
-    # ------------------------------------------------
-
     light-bow:
       name: "§f轻弓"
       type: ranged
@@ -95,21 +85,30 @@ items:
       enchantments:
         power: 5
 
-  # ==================================================
-  # 护甲 / 盾
-  # ==================================================
   equipments:
 
+    # 轻型 = 锁链甲（id 保留 leather-armor 兼容商店）
     leather-armor:
       name: "§a轻型护甲"
       type: armor
       price: 650
       kind: armor_set
       armor:
-        helmet: LEATHER_HELMET
-        chestplate: LEATHER_CHESTPLATE
-        leggings: LEATHER_LEGGINGS
-        boots: LEATHER_BOOTS
+        helmet: CHAINMAIL_HELMET
+        chestplate: CHAINMAIL_CHESTPLATE
+        leggings: CHAINMAIL_LEGGINGS
+        boots: CHAINMAIL_BOOTS
+
+    chain-armor:
+      name: "§a轻型护甲"
+      type: armor
+      price: 650
+      kind: armor_set
+      armor:
+        helmet: CHAINMAIL_HELMET
+        chestplate: CHAINMAIL_CHESTPLATE
+        leggings: CHAINMAIL_LEGGINGS
+        boots: CHAINMAIL_BOOTS
 
     iron-armor:
       name: "§f重型护甲"
@@ -130,10 +129,8 @@ items:
       slot: shield
       undroppable: true
 
-  # ==================================================
-  # 战术道具（每格 1 个，不堆叠）
-  # ==================================================
   grenades:
+
     smoke:
       name: "§7烟雾弹"
       type: utility
@@ -158,9 +155,6 @@ items:
       action: wither
       slot: utility
 
-  # ==================================================
-  # 爆破
-  # ==================================================
   bomb:
 
     plant-bomb:
@@ -170,20 +164,28 @@ items:
       price: 0
       action: plant
       slot: bomb
-      # 可丢弃、可捡回槽 2
       undroppable: false
 
-    defuse-kit:
-      name: "§e拆除钳"
-      type: utility
-      material: SHEARS
-      price: 300
-      action: defuse
-      slot: utility
+    bomb:
 
-  # ==================================================
-  # 技能充能
-  # ==================================================
+      plant-bomb:
+        name: "§c改造TNT"
+        type: bomb
+        material: TNT
+        price: 0
+        action: plant
+        slot: bomb
+        undroppable: false
+
+      defuse-kit:
+        name: "§e拆除钳"
+        type: defuse          # 不要用 utility，避免进道具槽逻辑
+        material: SHEARS
+        price: 300
+        action: defuse
+        slot: bomb            # 与 C4 同一槽（热键第 3 格）
+
+
   skill-charge:
 
     charge:
@@ -192,4 +194,3 @@ items:
       material: AMETHYST_SHARD
       price: 400
       action: skill_charge
-      slot: utility

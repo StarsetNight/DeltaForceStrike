@@ -11,9 +11,9 @@ world:
 # ---------- 队列（人数唯一来源，不要再写 game.max-player）----------
 queue:
   # 每队人数（3v3 改为 3）
-  team-size: 1
+  team-size: 3
   # 总人数（注意是 max-players）
-  max-players: 2
+  max-players: 6
   # 满人后倒计时（秒）
   countdown-seconds: 15
   # 倒计时中人数不足是否取消
@@ -22,6 +22,8 @@ queue:
   auto-balance: true
   # 倒计时阶段是否禁止新人加入
   lock-during-countdown: true
+  # 倒计时到达这些秒数的时候提醒加入队伍
+  team-click-remind-seconds: [15, 10]
 
 # ---------- 干员 ----------
 operator:
@@ -29,6 +31,10 @@ operator:
   # false = 暂不开放选择，倒计时后直接开打
   select-enabled: false
   select-seconds: 45
+
+guide:
+  # 新加入队列时是否自动发送玩法
+  send-on-join: true
 
 # ---------- 比赛 ----------
 match:
@@ -38,15 +44,17 @@ match:
   win-target: 5
   # 最多回合（含换边后）
   max-rounds: 8
+  # 整局结束 Title 停留后再回队列
+  end-title-delay-ticks: 70
 
 # ---------- 经济 ----------
 economy:
   start-money: 800
   victory-bonus: 3200
   defeat-bonus:
-    - 1600
     - 2000
     - 2400
+    - 2800
   loss-streak-bonus:
     - 2000
     - 2400
@@ -60,7 +68,7 @@ economy:
 # ---------- 回合 ----------
 round:
   # 购买阶段（秒）
-  prepare-time: 15
+  prepare-time: 20
   # 战斗/进攻时间（秒）；超时且未安包 → CT 胜
   combat-time: 100
   # 购买阶段出生点水平活动半径（格）
@@ -76,6 +84,13 @@ player:
   drop-equipment: false
   armor-vanish: true
   allow-diamond-armor: false
+  shield-enabled: false
+
+spectator:
+  # 死亡后强制观战友方
+  lock-to-teammates: true
+  # 滚轮切换队友
+  scroll-cycle: true
 
 # ---------- 炸弹 ----------
 bomb:
@@ -92,15 +107,16 @@ bomb:
       x: -113.5
       y: -48.0
       z: -126.5
-      radius: 9.0
+      radius: 10.0
     b:
       world: delta_force_strike
       x: -54.5
       y: -48.0
       z: -40.5
-      radius: 6.0
+      radius: 9.0
 
 grenade:
+  particle-multiplier: 2.0
   smoke:
     duration-ticks: 160   # 8 秒
     radius: 4.0
@@ -126,25 +142,25 @@ grenade:
 locations:
   queue-spawn:
     world: delta_force_strike
-    x: -62.5
+    x: 0.5
     y: -50.0
-    z: -121.5
+    z: 0.5
     yaw: 0
     pitch: 0
   team-t-spawn:
     world: delta_force_strike
-    x: 17.5
-    y: -54.0
-    z: -127.5
+    x: 0.5
+    y: 0.0
+    z: 0.5
     yaw: -90
     pitch: 0
   team-ct-spawn:
     world: delta_force_strike
-    x: -126.5
-    y: -49.0
-    z: -65.5
+    x: 0.5
+    y: 0.0
+    z: 0.5
     yaw: 90
     pitch: 0
 
 debug:
-  enabled: true
+  enabled: false

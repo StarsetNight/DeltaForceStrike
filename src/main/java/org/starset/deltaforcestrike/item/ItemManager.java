@@ -126,15 +126,25 @@ public class ItemManager {
         return v != null && v == 1;
     }
 
+    /**
+     * 识别是否为「守护」类物品（用于清理/锁定）。
+     * 发放是否允许见 ConfigKeys.shieldEnabled()。
+     */
     public boolean isShield(ItemStack stack) {
         if (stack == null || stack.getType().isAir()) {
             return false;
         }
-        if (stack.getType() == Material.SHIELD) {
+        if ("shield".equalsIgnoreCase(getItemType(stack))) {
             return true;
         }
-        return "shield".equalsIgnoreCase(getItemType(stack));
+        String id = getItemId(stack);
+        if (id != null && id.toLowerCase(Locale.ROOT).contains("shield")) {
+            return true;
+        }
+        // 关闭盾时：原版 SHIELD 也当残留清掉
+        return stack.getType() == Material.SHIELD;
     }
+
 
     // ------------------------------------------------------------------
     // 创建 / 发放

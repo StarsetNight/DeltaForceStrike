@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "org.starset"
-version = "0.1.0-a"
+version = "1.0.0"
 
 repositories {
     mavenCentral()
