@@ -5,6 +5,7 @@ import org.bukkit.configuration.ConfigurationSection;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public final class GameItem {
@@ -12,14 +13,14 @@ public final class GameItem {
     private final String id;
     private final String name;
     private final String type;
-    private final String kind; // item | armor_set
+    private final String kind;
     private final Material material;
     private final int price;
     private final String action;
     private final String slot;
     private final boolean undroppable;
     private final Map<String, Integer> enchantments;
-    private final Map<String, Material> armorPieces; // helmet/chestplate/...
+    private final Map<String, Material> armorPieces;
 
     private GameItem(Builder b) {
         this.id = b.id;
@@ -54,7 +55,7 @@ public final class GameItem {
         ConfigurationSection ench = section.getConfigurationSection("enchantments");
         if (ench != null) {
             for (String key : ench.getKeys(false)) {
-                b.enchantments.put(key.toLowerCase(), ench.getInt(key));
+                b.enchantments.put(key.toLowerCase(Locale.ROOT), ench.getInt(key));
             }
         }
 
@@ -63,7 +64,7 @@ public final class GameItem {
             for (String part : armor.getKeys(false)) {
                 Material m = Material.matchMaterial(armor.getString(part, ""));
                 if (m != null) {
-                    b.armorPieces.put(part.toLowerCase(), m);
+                    b.armorPieces.put(part.toLowerCase(Locale.ROOT), m);
                 }
             }
         }
@@ -86,6 +87,16 @@ public final class GameItem {
     public boolean isUndroppable() { return undroppable; }
     public Map<String, Integer> getEnchantments() { return enchantments; }
     public Map<String, Material> getArmorPieces() { return armorPieces; }
+
+    @Override
+    public String toString() {
+        return "GameItem{id=" + id
+                + ", kind=" + kind
+                + ", type=" + type
+                + ", slot=" + slot
+                + ", price=" + price
+                + "}";
+    }
 
     private static final class Builder {
         String id, name, type, kind = "item", action, slot;

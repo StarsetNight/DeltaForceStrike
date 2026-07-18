@@ -113,6 +113,7 @@ items:
       type: shield
       material: SHIELD
       price: 0
+      slot: shield
       undroppable: true
 
   grenades:

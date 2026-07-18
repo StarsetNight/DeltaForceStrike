@@ -89,23 +89,19 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
     }
 
     private void giveItem(Player player, String id) {
+        boolean ok = plugin.getItemGiveService().give(player, id, true);
+        if (!ok) {
+            player.sendMessage("§c发放失败: " + id + "（槽位满或未知物品）");
+            return;
+        }
         GameItem gi = plugin.getItemManager().getGameItem(id);
-        if (gi == null) {
-            player.sendMessage("§c未知物品: " + id);
-            return;
+        if (gi != null && "shield".equalsIgnoreCase(gi.getType())) {
+            player.sendMessage("§a已装备盾牌到副手: " + id);
+        } else if (gi != null && gi.isArmorSet()) {
+            player.sendMessage("§a已穿戴护甲: " + id);
+        } else {
+            player.sendMessage("§a已按固定槽位发放: " + id + "（每格 1 个）");
         }
-        if (gi.isArmorSet()) {
-            boolean ok = plugin.getItemManager().giveArmorSet(player, id);
-            player.sendMessage(ok ? "§a已发放护甲套装: " + id : "§c护甲发放失败: " + id);
-            return;
-        }
-        var stack = plugin.getItemManager().createItem(id);
-        if (stack == null) {
-            player.sendMessage("§c创建物品失败: " + id);
-            return;
-        }
-        player.getInventory().addItem(stack);
-        player.sendMessage("§a已给予: " + id);
     }
 
     @Override

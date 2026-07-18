@@ -22,4 +22,9 @@ public final class ItemKeys {
     public static NamespacedKey undroppable() {
         return new NamespacedKey(DeltaForceStrike.getInstance(), "undroppable");
     }
+
+    /** 每件独立实例，防止堆叠 / isSimilar 合并 */
+    public static NamespacedKey instanceId() {
+        return new NamespacedKey(DeltaForceStrike.getInstance(), "instance_id");
+    }
 }

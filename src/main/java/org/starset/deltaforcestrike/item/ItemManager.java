@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.logging.Level;
 
 public class ItemManager {
@@ -31,6 +32,10 @@ public class ItemManager {
     public ItemManager(DeltaForceStrike plugin) {
         this.plugin = plugin;
     }
+
+    // ------------------------------------------------------------------
+    // 加载
+    // ------------------------------------------------------------------
 
     public void loadItems() {
         items.clear();
@@ -52,9 +57,13 @@ public class ItemManager {
 
         if (plugin.getConfig().getBoolean("debug.enabled", false)) {
             items.keySet().stream().sorted().forEach(id ->
-                    plugin.getLogger().info("  - " + id + " ($" + items.get(id).getPrice() + ")")
+                    plugin.getLogger().info("  - " + items.get(id))
             );
         }
+    }
+
+    public void reload() {
+        loadItems();
     }
 
     private void loadSection(ConfigurationSection section, String path) {
@@ -66,12 +75,10 @@ public class ItemManager {
 
             String currentPath = path.isEmpty() ? key : path + "." + key;
 
-            // 叶子节点：有 name，且有 material 或 armor 套装
             if (child.contains("name") && (child.contains("material") || child.contains("armor"))) {
                 try {
                     GameItem item = GameItem.from(currentPath, child);
                     items.put(currentPath, item);
-                    // 短 id 别名（不覆盖已有长路径/其它条目）
                     items.putIfAbsent(key, item);
                 } catch (Exception e) {
                     plugin.getLogger().log(Level.WARNING, "加载物品失败: " + currentPath, e);
@@ -82,6 +89,10 @@ public class ItemManager {
         }
     }
 
+    // ------------------------------------------------------------------
+    // 查询
+    // ------------------------------------------------------------------
+
     public GameItem getGameItem(String id) {
         return items.get(id);
     }
@@ -90,7 +101,45 @@ public class ItemManager {
         return Collections.unmodifiableMap(items);
     }
 
-    /** 创建单件物品（非护甲套装） */
+    public String getItemId(ItemStack stack) {
+        if (stack == null || !stack.hasItemMeta()) {
+            return null;
+        }
+        return stack.getItemMeta().getPersistentDataContainer()
+                .get(ItemKeys.id(), PersistentDataType.STRING);
+    }
+
+    public String getItemType(ItemStack stack) {
+        if (stack == null || !stack.hasItemMeta()) {
+            return null;
+        }
+        return stack.getItemMeta().getPersistentDataContainer()
+                .get(ItemKeys.type(), PersistentDataType.STRING);
+    }
+
+    public boolean isUndroppable(ItemStack stack) {
+        if (stack == null || !stack.hasItemMeta()) {
+            return false;
+        }
+        Byte v = stack.getItemMeta().getPersistentDataContainer()
+                .get(ItemKeys.undroppable(), PersistentDataType.BYTE);
+        return v != null && v == 1;
+    }
+
+    public boolean isShield(ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) {
+            return false;
+        }
+        if (stack.getType() == Material.SHIELD) {
+            return true;
+        }
+        return "shield".equalsIgnoreCase(getItemType(stack));
+    }
+
+    // ------------------------------------------------------------------
+    // 创建 / 发放
+    // ------------------------------------------------------------------
+
     public ItemStack createItem(String id) {
         GameItem def = items.get(id);
         if (def == null) {
@@ -109,23 +158,45 @@ public class ItemManager {
         ItemStack stack = new ItemStack(def.getMaterial());
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
-            meta.displayName(color(def.getName()));
-            meta.getPersistentDataContainer().set(ItemKeys.id(), PersistentDataType.STRING, def.getId());
-            meta.getPersistentDataContainer().set(ItemKeys.type(), PersistentDataType.STRING, def.getType());
-            if (def.getAction() != null && !def.getAction().isEmpty()) {
-                meta.getPersistentDataContainer().set(ItemKeys.action(), PersistentDataType.STRING, def.getAction());
-            }
-            if (def.isUndroppable()) {
-                meta.getPersistentDataContainer().set(ItemKeys.undroppable(), PersistentDataType.BYTE, (byte) 1);
-            }
+            applyMetaTags(meta, def);
             stack.setItemMeta(meta);
         }
 
         applyEnchantments(stack, def);
+
+        // 附魔后再次确保：诅咒 / 不堆叠 / 实例 ID / amount=1
+        ItemMeta m2 = stack.getItemMeta();
+        if (m2 != null) {
+            if (shouldVanish(def)) {
+                applyVanishingCurse(m2);
+            }
+            if (shouldBeUnique(def)) {
+                m2.setMaxStackSize(1);
+                if (!m2.getPersistentDataContainer().has(ItemKeys.instanceId(), PersistentDataType.STRING)) {
+                    m2.getPersistentDataContainer().set(
+                            ItemKeys.instanceId(),
+                            PersistentDataType.STRING,
+                            UUID.randomUUID().toString()
+                    );
+                }
+            }
+            boolean undroppable = def.isUndroppable()
+                    || "shield".equalsIgnoreCase(def.getType())
+                    || "armor".equalsIgnoreCase(def.getType());
+            if (undroppable) {
+                m2.getPersistentDataContainer()
+                        .set(ItemKeys.undroppable(), PersistentDataType.BYTE, (byte) 1);
+            }
+            stack.setItemMeta(m2);
+        }
+
+        if (shouldBeUnique(def) && stack.getAmount() != 1) {
+            stack.setAmount(1);
+        }
+
         return stack;
     }
 
-    /** 发放护甲套装 */
     public boolean giveArmorSet(Player player, String id) {
         GameItem def = items.get(id);
         if (def == null || !def.isArmorSet()) {
@@ -148,6 +219,80 @@ public class ItemManager {
         return true;
     }
 
+    // ------------------------------------------------------------------
+    // Meta / 附魔 / 消失诅咒 / 不堆叠
+    // ------------------------------------------------------------------
+
+    private void applyMetaTags(ItemMeta meta, GameItem def) {
+        meta.displayName(color(def.getName()));
+        meta.getPersistentDataContainer().set(ItemKeys.id(), PersistentDataType.STRING, def.getId());
+        meta.getPersistentDataContainer().set(
+                ItemKeys.type(),
+                PersistentDataType.STRING,
+                def.getType() == null ? "misc" : def.getType()
+        );
+
+        if (def.getAction() != null && !def.getAction().isEmpty()) {
+            meta.getPersistentDataContainer()
+                    .set(ItemKeys.action(), PersistentDataType.STRING, def.getAction());
+        }
+
+        boolean undroppable = def.isUndroppable()
+                || "shield".equalsIgnoreCase(def.getType())
+                || "armor".equalsIgnoreCase(def.getType());
+
+        if (undroppable) {
+            meta.getPersistentDataContainer()
+                    .set(ItemKeys.undroppable(), PersistentDataType.BYTE, (byte) 1);
+        }
+
+        if (shouldVanish(def)) {
+            applyVanishingCurse(meta);
+        }
+
+        if (shouldBeUnique(def)) {
+            meta.setMaxStackSize(1);
+            meta.getPersistentDataContainer().set(
+                    ItemKeys.instanceId(),
+                    PersistentDataType.STRING,
+                    UUID.randomUUID().toString()
+            );
+        }
+    }
+
+    /**
+     * 竞技物默认一件一格：武器、道具、炸弹、盾、技能。
+     */
+    public boolean shouldBeUnique(GameItem def) {
+        if (def == null) {
+            return false;
+        }
+        String type = def.getType() == null ? "" : def.getType().toLowerCase(Locale.ROOT);
+        String slot = def.getSlot() == null ? "" : def.getSlot().toLowerCase(Locale.ROOT);
+        Material mat = def.getMaterial();
+
+        if (type.equals("melee") || type.equals("ranged")
+                || type.equals("utility") || type.equals("bomb")
+                || type.equals("shield") || type.equals("skill")
+                || type.equals("skill_charge")) {
+            return true;
+        }
+        if (slot.equals("melee") || slot.equals("ranged")
+                || slot.equals("utility") || slot.equals("bomb")
+                || slot.equals("shield")) {
+            return true;
+        }
+        if (mat == null) {
+            return false;
+        }
+        return mat == Material.FIREWORK_STAR
+                || mat == Material.FIRE_CHARGE
+                || mat == Material.WITHER_SKELETON_SKULL
+                || mat == Material.SHEARS
+                || mat == Material.TNT
+                || mat == Material.SHIELD;
+    }
+
     private ItemStack taggedArmor(Material material, GameItem def) {
         ItemStack stack = new ItemStack(material);
         ItemMeta meta = stack.getItemMeta();
@@ -156,17 +301,39 @@ public class ItemManager {
             meta.getPersistentDataContainer().set(ItemKeys.id(), PersistentDataType.STRING, def.getId());
             meta.getPersistentDataContainer().set(ItemKeys.type(), PersistentDataType.STRING, "armor");
             meta.getPersistentDataContainer().set(ItemKeys.undroppable(), PersistentDataType.BYTE, (byte) 1);
-
+            meta.setMaxStackSize(1);
+            meta.getPersistentDataContainer().set(
+                    ItemKeys.instanceId(),
+                    PersistentDataType.STRING,
+                    UUID.randomUUID().toString()
+            );
             if (plugin.getConfig().getBoolean("player.armor-vanish", true)) {
-                Enchantment vanishing = resolveEnchantment("vanishing_curse");
-                if (vanishing != null) {
-                    meta.addEnchant(vanishing, 1, true);
-                    meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
-                }
+                applyVanishingCurse(meta);
             }
             stack.setItemMeta(meta);
         }
         return stack;
+    }
+
+    private boolean shouldVanish(GameItem def) {
+        if (!plugin.getConfig().getBoolean("player.armor-vanish", true)) {
+            return false;
+        }
+        String type = def.getType() == null ? "" : def.getType().toLowerCase(Locale.ROOT);
+        return def.isUndroppable()
+                || def.isArmorSet()
+                || "shield".equals(type)
+                || "armor".equals(type);
+    }
+
+    private void applyVanishingCurse(ItemMeta meta) {
+        Enchantment vanishing = resolveEnchantment("vanishing_curse");
+        if (vanishing != null) {
+            meta.addEnchant(vanishing, 1, true);
+            meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+        } else {
+            plugin.getLogger().warning("无法解析附魔 vanishing_curse");
+        }
     }
 
     private void applyEnchantments(ItemStack item, GameItem def) {
@@ -180,9 +347,6 @@ public class ItemManager {
         }
     }
 
-    /**
-     * Paper 1.21+：使用 RegistryAccess，避免弃用的 Registry.ENCHANTMENT。
-     */
     private Enchantment resolveEnchantment(String key) {
         String k = key.toLowerCase(Locale.ROOT).trim();
         NamespacedKey namespacedKey = NamespacedKey.minecraft(k);
@@ -191,26 +355,10 @@ public class ItemManager {
                 .get(namespacedKey);
     }
 
-    public String getItemId(ItemStack stack) {
-        if (stack == null || !stack.hasItemMeta()) {
-            return null;
-        }
-        return stack.getItemMeta().getPersistentDataContainer().get(ItemKeys.id(), PersistentDataType.STRING);
-    }
-
-    public boolean isUndroppable(ItemStack stack) {
-        if (stack == null || !stack.hasItemMeta()) {
-            return false;
-        }
-        Byte v = stack.getItemMeta().getPersistentDataContainer().get(ItemKeys.undroppable(), PersistentDataType.BYTE);
-        return v != null && v == 1;
-    }
-
-    public void reload() {
-        loadItems();
-    }
-
     private static Component color(String input) {
+        if (input == null) {
+            return Component.empty();
+        }
         return LegacyComponentSerializer.legacySection().deserialize(input);
     }
 }
