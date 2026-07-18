@@ -1,8 +1,10 @@
 package org.starset.deltaforcestrike;
 
+import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.starset.deltaforcestrike.command.DFSCommand;
 import org.starset.deltaforcestrike.item.ItemManager;
+import org.starset.deltaforcestrike.listener.ItemProtectListener;
 import org.starset.deltaforcestrike.manager.GameManager;
 
 public final class DeltaForceStrike extends JavaPlugin {
@@ -17,20 +19,22 @@ public final class DeltaForceStrike extends JavaPlugin {
         instance = this;
 
         saveDefaultConfig();
-        // items.yml 由 ItemManager 负责 saveResource
 
         itemManager = new ItemManager(this);
         itemManager.loadItems();
 
         gameManager = new GameManager(this);
 
-        if (getCommand("dfs") != null) {
-            DFSCommand cmd = new DFSCommand(this);
-            getCommand("dfs").setExecutor(cmd);
-            getCommand("dfs").setTabCompleter(cmd);
+        PluginCommand dfs = getCommand("dfs");
+        if (dfs == null) {
+            getLogger().severe("plugin.yml 未注册 dfs 命令，插件功能不完整！");
         } else {
-            getLogger().severe("plugin.yml 未注册 dfs 命令！");
+            DFSCommand executor = new DFSCommand(this);
+            dfs.setExecutor(executor);
+            dfs.setTabCompleter(executor);
         }
+
+        getServer().getPluginManager().registerEvents(new ItemProtectListener(this), this);
 
         getLogger().info("DeltaForceStrike v" + getPluginMeta().getVersion() + " 已启动");
         getLogger().info("物品数: " + itemManager.getAll().size());
