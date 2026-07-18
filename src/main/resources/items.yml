@@ -1,9 +1,16 @@
-# DeltaForceStrike 物品配置
-# id 路径示例: weapons.standard / grenades.smoke / bomb.plant-bomb
+# ============================================================
+# DeltaForceStrike - 物品配置
+# id 路径示例: weapons.dragon / grenades.smoke / bomb.plant-bomb
+# 短 id 别名由 ItemManager 自动注册（如 dragon、smoke）
+# ============================================================
 
 items:
 
+  # ==================================================
+  # 武器 - 近战
+  # ==================================================
   weapons:
+
     standard:
       name: "§f标准"
       type: melee
@@ -45,6 +52,10 @@ items:
       enchantments:
         sharpness: 6
 
+    # ------------------------------------------------
+    # 武器 - 远程
+    # ------------------------------------------------
+
     light-bow:
       name: "§f轻弓"
       type: ranged
@@ -84,12 +95,15 @@ items:
       enchantments:
         power: 5
 
+  # ==================================================
+  # 护甲 / 盾
+  # ==================================================
   equipments:
+
     leather-armor:
       name: "§a轻型护甲"
       type: armor
       price: 650
-      # 套装：无单 material，用 kind: armor_set
       kind: armor_set
       armor:
         helmet: LEATHER_HELMET
@@ -116,7 +130,11 @@ items:
       slot: shield
       undroppable: true
 
+  # ==================================================
+  # 战术道具（每格 1 个，不堆叠）
+  # ==================================================
   grenades:
+
     smoke:
       name: "§7烟雾弹"
       type: utility
@@ -141,7 +159,11 @@ items:
       action: wither
       slot: utility
 
+  # ==================================================
+  # 爆破
+  # ==================================================
   bomb:
+
     plant-bomb:
       name: "§c改造TNT"
       type: bomb
@@ -149,6 +171,8 @@ items:
       price: 0
       action: plant
       slot: bomb
+      # 可丢弃、可捡回槽 2
+      undroppable: false
 
     defuse-kit:
       name: "§e拆除钳"
@@ -158,10 +182,15 @@ items:
       action: defuse
       slot: utility
 
+  # ==================================================
+  # 技能充能
+  # ==================================================
   skill-charge:
+
     charge:
       name: "§d技能充能"
       type: skill_charge
       material: AMETHYST_SHARD
       price: 400
       action: skill_charge
+      slot: utility

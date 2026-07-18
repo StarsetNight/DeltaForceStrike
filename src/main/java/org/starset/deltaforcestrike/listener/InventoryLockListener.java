@@ -22,6 +22,8 @@ import org.starset.deltaforcestrike.item.ItemKeys;
 import org.starset.deltaforcestrike.item.ItemManager;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
+import org.starset.deltaforcestrike.match.PlayerSession;
+import org.starset.deltaforcestrike.match.Team;
 import org.starset.deltaforcestrike.util.InventorySlots;
 import org.starset.deltaforcestrike.util.ItemPlacement;
 import org.starset.deltaforcestrike.util.Worlds;
@@ -29,29 +31,40 @@ import org.starset.deltaforcestrike.util.Worlds;
 import java.util.Locale;
 import java.util.UUID;
 
+/**
+ * 对局内物品栏锁定：
+ * - 自定义物品固定热键槽
+ * - 主背包 9–35 禁止自定义物（箭等白名单除外）
+ * - 副手仅盾；技能槽锁定
+ * - CT 不得持有改造 TNT
+ * - 不使用已移除的 HOTBAR_MOVE_AND_READD
+ */
 public class InventoryLockListener implements Listener {
 
     private final DeltaForceStrike plugin;
-    private boolean alwaysLock = true;
 
     public InventoryLockListener(DeltaForceStrike plugin) {
         this.plugin = plugin;
     }
 
-    public void setAlwaysLock(boolean alwaysLock) {
-        this.alwaysLock = alwaysLock;
-    }
-
+    /**
+     * 仅竞技世界 + 在队列/对局里 + 正式对局阶段锁定。
+     * 排队 WAITING/COUNTDOWN 不锁（大厅手感）。
+     */
     public boolean shouldLock(Player player) {
-        if (!Worlds.isArena(player)) return false;
-        if (!plugin.getMatchManager().isInMatch(player)) return false;
+        if (player == null || !Worlds.isArena(player)) {
+            return false;
+        }
+        if (!plugin.getMatchManager().isInMatch(player)) {
+            return false;
+        }
         Match match = plugin.getMatchManager().getMatch();
-        if (match == null) return false;
-        // 仅正式对局锁物品栏；排队期不锁（像大厅）
-        return match.getState() == MatchState.IN_PROGRESS
-                || match.getState() == MatchState.AGENT_SELECT;
+        if (match == null) {
+            return false;
+        }
+        MatchState state = match.getState();
+        return state == MatchState.IN_PROGRESS || state == MatchState.AGENT_SELECT;
     }
-
 
     // =====================================================================
     // 点击
@@ -66,6 +79,7 @@ public class InventoryLockListener implements Listener {
             return;
         }
 
+        // 商店 GUI：只取消顶部由 ShopListener 处理；底部玩家栏仍走锁定
         ItemManager items = plugin.getItemManager();
         Inventory bottom = event.getView().getBottomInventory();
         Inventory clicked = event.getClickedInventory();
@@ -87,6 +101,7 @@ public class InventoryLockListener implements Listener {
         if (clickOnPlayerInv) {
             int slot = event.getSlot();
 
+            // 副手 40
             if (slot == 40) {
                 if (!allowOffhandClick(items, cursor, current, event.getAction())) {
                     event.setCancelled(true);
@@ -96,6 +111,7 @@ public class InventoryLockListener implements Listener {
                 }
             }
 
+            // 护甲 36–39
             if (slot >= 36 && slot <= 39) {
                 if (!isEmpty(current) || !isEmpty(cursor)) {
                     event.setCancelled(true);
@@ -104,6 +120,7 @@ public class InventoryLockListener implements Listener {
                 }
             }
 
+            // 主背包 9–35
             if (isStorageSlot(slot)) {
                 if (isPlacingOrSwap(event.getAction()) && isCustomItem(items, cursor)) {
                     event.setCancelled(true);
@@ -115,6 +132,23 @@ public class InventoryLockListener implements Listener {
                     deny(player, "盾牌只能放在副手。");
                     return;
                 }
+                // 允许原版箭放进背包
+                if (isPlacingOrSwap(event.getAction())
+                        && !isEmpty(cursor)
+                        && !isCustomItem(items, cursor)
+                        && !isAllowedVanilla(cursor)
+                        && !isEmpty(cursor)) {
+                    // 对局中禁止把任意原版杂物塞包（箭除外已在 isAllowedVanilla）
+                    // 空手/箭已放行；其它原版也可禁止：
+                    if (!isAllowedVanilla(cursor)) {
+                        // 若光标是纯原版非箭，禁止
+                        // 注意：商店购买不会走这里
+                        // 放宽：只拦自定义；原版非箭若要禁可取消注释
+                        // event.setCancelled(true);
+                        // deny(player, "对局中不可将杂物放入背包。");
+                        // return;
+                    }
+                }
                 if (event.isShiftClick() && (isCustomItem(items, current) || isShield(items, current))) {
                     event.setCancelled(true);
                     deny(player, "请手动将物品放到对应固定槽，禁止 Shift。");
@@ -122,6 +156,7 @@ public class InventoryLockListener implements Listener {
                 }
             }
 
+            // 热键 0–8
             if (InventorySlots.isHotbar(slot)) {
                 if (InventorySlots.isLockedSkillSlot(slot)) {
                     event.setCancelled(true);
@@ -135,25 +170,21 @@ public class InventoryLockListener implements Listener {
                         forceShieldOffhandNextTick(player);
                         return;
                     }
-                    // 道具槽已有物品时禁止把另一件叠/换进去（非空则仅允许 swap 同类？直接禁止堆叠：cursor amount>1 或目标非空且 similar）
                     if (isCustomItem(items, cursor) && !canPlaceInHotbar(items, cursor, slot)) {
                         event.setCancelled(true);
                         deny(player, "该物品不能放在此槽位。");
                         return;
                     }
-                    // 禁止往已有非堆叠物的格子「合并」
+                    // 非堆叠物禁止往非空格合并
                     if (!isEmpty(current)
                             && ItemPlacement.isNonStackable(items, cursor)
                             && ItemPlacement.isNonStackable(items, current)
-                            && event.getAction() != InventoryAction.SWAP_WITH_CURSOR) {
-                        // PLACE 到非空格会变成合并尝试
-                        if (event.getAction() == InventoryAction.PLACE_ALL
-                                || event.getAction() == InventoryAction.PLACE_ONE
-                                || event.getAction() == InventoryAction.PLACE_SOME) {
-                            event.setCancelled(true);
-                            deny(player, "该槽已有物品，每格仅限 1 个。");
-                            return;
-                        }
+                            && (event.getAction() == InventoryAction.PLACE_ALL
+                            || event.getAction() == InventoryAction.PLACE_ONE
+                            || event.getAction() == InventoryAction.PLACE_SOME)) {
+                        event.setCancelled(true);
+                        deny(player, "该槽已有物品，每格仅限 1 个。");
+                        return;
                     }
                 }
                 if (event.isShiftClick() && isCustomItem(items, current)) {
@@ -164,7 +195,7 @@ public class InventoryLockListener implements Listener {
                 if (event.isShiftClick() && (InventorySlots.isLockedSkillSlot(slot)
                         || isSkillItem(items, current)
                         || isShield(items, current)
-                        || (!isEmpty(current) && items.isUndroppable(current)))) {
+                        || (!isEmpty(current) && items.isUndroppable(current) && isShield(items, current)))) {
                     event.setCancelled(true);
                     deny(player, "该槽位物品不可移出。");
                     return;
@@ -179,6 +210,7 @@ public class InventoryLockListener implements Listener {
             }
         }
 
+        // 光标拿盾：只能放副手
         if (!isEmpty(cursor) && isShield(items, cursor)) {
             if (clickOnPlayerInv && event.getSlot() != 40) {
                 event.setCancelled(true);
@@ -187,17 +219,16 @@ public class InventoryLockListener implements Listener {
             }
         }
 
-        if (event.getAction() == InventoryAction.COLLECT_TO_CURSOR && isSkillItem(items, current)) {
-            event.setCancelled(true);
-        }
-
-        // 双击收集非堆叠物
-        if (event.getAction() == InventoryAction.COLLECT_TO_CURSOR
-                && ItemPlacement.isNonStackable(items, current)) {
-            event.setCancelled(true);
+        if (event.getAction() == InventoryAction.COLLECT_TO_CURSOR) {
+            if (isSkillItem(items, current) || ItemPlacement.isNonStackable(items, current)) {
+                event.setCancelled(true);
+            }
         }
     }
 
+    /**
+     * @return true 表示已处理完
+     */
     private boolean handleNumberKey(InventoryClickEvent event, Player player, ItemManager items,
                                     Inventory clicked, Inventory bottom, PlayerInventory playerInv) {
         int hotbarButton = event.getHotbarButton();
@@ -223,10 +254,11 @@ public class InventoryLockListener implements Listener {
             return true;
         }
 
+        // 数字键 ↔ 副手
         if (slot == 40) {
             ItemStack hotbarItem = playerInv.getItem(hotbarButton);
             ItemStack off = playerInv.getItemInOffHand();
-            if (!isEmpty(off) && (isShield(items, off) || items.isUndroppable(off))) {
+            if (!isEmpty(off) && (isShield(items, off) || (items.isUndroppable(off) && isShield(items, off)))) {
                 event.setCancelled(true);
                 deny(player, "盾牌不可移出副手。");
                 forceShieldOffhandNextTick(player);
@@ -239,24 +271,25 @@ public class InventoryLockListener implements Listener {
             }
         }
 
+        // 数字键 ↔ 主背包
         if (isStorageSlot(slot)) {
             ItemStack hotbarItem = playerInv.getItem(hotbarButton);
-            if (isCustomItem(items, hotbarItem)
-                    || isCustomItem(items, event.getCurrentItem())
-                    || isShield(items, hotbarItem)
-                    || isShield(items, event.getCurrentItem())) {
+            ItemStack current = event.getCurrentItem();
+            if (isCustomItem(items, hotbarItem) || isCustomItem(items, current)
+                    || isShield(items, hotbarItem) || isShield(items, current)) {
                 event.setCancelled(true);
                 deny(player, "自定义物品/盾牌不能进入背包。");
                 return true;
             }
         }
 
+        // 数字键 ↔ 热键
         if (InventorySlots.isHotbar(slot)) {
             ItemStack movingToHotbar = event.getCurrentItem();
             ItemStack movingToSlot = playerInv.getItem(hotbarButton);
             if (isShield(items, movingToHotbar) || isShield(items, movingToSlot)) {
                 event.setCancelled(true);
-                deny(player, "盾牌只能在副手，不能进热键栏。");
+                deny(player, "盾牌只能在副手。");
                 forceShieldOffhandNextTick(player);
                 return true;
             }
@@ -292,7 +325,6 @@ public class InventoryLockListener implements Listener {
         ItemStack old = event.getOldCursor();
         int topSize = event.getView().getTopInventory().getSize();
 
-        // 非堆叠物禁止一次拖到多格
         if (ItemPlacement.isNonStackable(items, old) && event.getRawSlots().size() > 1) {
             event.setCancelled(true);
             deny(player, "该物品每格仅限 1 个，不可拖拽分堆。");
@@ -371,7 +403,7 @@ public class InventoryLockListener implements Listener {
             return;
         }
 
-        if (!isEmpty(offBefore) && items.isUndroppable(offBefore)) {
+        if (!isEmpty(offBefore) && items.isUndroppable(offBefore) && isShield(items, offBefore)) {
             event.setCancelled(true);
             deny(player, "副手物品已锁定。");
             return;
@@ -406,10 +438,18 @@ public class InventoryLockListener implements Listener {
         ItemManager items = plugin.getItemManager();
         ItemStack stack = event.getItemDrop().getItemStack();
 
-        if (items.isUndroppable(stack) || isShield(items, stack) || isSkillItem(items, stack)) {
+        // 盾 / 技能不可丢；武器道具 TNT 可丢
+        if (isShield(items, stack) || isSkillItem(items, stack)) {
             event.setCancelled(true);
             deny(player, "该物品不可丢弃。");
             forceShieldOffhandNextTick(player);
+            return;
+        }
+        // 护甲 undroppable
+        String type = items.getItemType(stack);
+        if (type != null && type.equalsIgnoreCase("armor")) {
+            event.setCancelled(true);
+            deny(player, "护甲不可丢弃。");
             return;
         }
         if (InventorySlots.isLockedSkillSlot(player.getInventory().getHeldItemSlot())) {
@@ -434,7 +474,7 @@ public class InventoryLockListener implements Listener {
     }
 
     // =====================================================================
-    // 公开校正
+    // 公开清扫 API
     // =====================================================================
 
     public void forceShieldOffhandNextTick(Player player) {
@@ -442,14 +482,47 @@ public class InventoryLockListener implements Listener {
     }
 
     public void sanitizeAll(Player player) {
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+        if (!shouldLock(player)) {
+            return;
+        }
         splitIllegalStacks(player);
         sanitizeOffhandAndShields(player);
         sanitizeStorageCustomItems(player);
+        stripBombFromCT(player);
     }
 
-    /**
-     * 拆分 amount>1 的非堆叠自定义物。
-     */
+    /** CT 不得持有改造 TNT */
+    private void stripBombFromCT(Player player) {
+        Match match = plugin.getMatchManager().getMatch();
+        if (match == null) {
+            return;
+        }
+        PlayerSession session = match.getSession(player.getUniqueId());
+        if (session == null || session.getTeam() != Team.CT) {
+            return;
+        }
+        ItemStack bomb = player.getInventory().getItem(InventorySlots.BOMB);
+        if (isEmpty(bomb)) {
+            return;
+        }
+        boolean isBomb = false;
+        if (plugin.getBombManager() != null && plugin.getBombManager().isPlantBomb(bomb)) {
+            isBomb = true;
+        } else {
+            ItemManager items = plugin.getItemManager();
+            String type = items.getItemType(bomb);
+            String id = items.getItemId(bomb);
+            isBomb = "bomb".equalsIgnoreCase(type) || (id != null && id.contains("plant-bomb"));
+        }
+        if (isBomb) {
+            player.getInventory().setItem(InventorySlots.BOMB, null);
+        }
+    }
+
+    /** 拆分 amount>1 的非堆叠自定义物 */
     public void splitIllegalStacks(Player player) {
         if (player == null || !player.isOnline() || !shouldLock(player)) {
             return;
@@ -466,17 +539,20 @@ public class InventoryLockListener implements Listener {
             } else if (i <= 35) {
                 stack = inv.getItem(i);
             } else {
-                continue; // 36-39 护甲不拆堆
+                continue;
             }
 
-            if (stack == null || stack.getType().isAir()) {
+            if (isEmpty(stack)) {
+                continue;
+            }
+            // 箭不拆
+            if (isAllowedVanilla(stack)) {
                 continue;
             }
             if (!ItemPlacement.isNonStackable(items, stack)) {
                 continue;
             }
             if (stack.getAmount() <= 1) {
-                // 仍确保 maxStackSize / instance
                 ensureUniqueMeta(stack);
                 if (i == 40) {
                     inv.setItemInOffHand(stack);
@@ -563,10 +639,15 @@ public class InventoryLockListener implements Listener {
         ItemManager items = plugin.getItemManager();
         PlayerInventory inv = player.getInventory();
 
-        // 1) 主背包 9–35
+        // 主背包 9–35
         for (int i = 9; i <= 35; i++) {
             ItemStack stack = inv.getItem(i);
             if (isEmpty(stack)) {
+                continue;
+            }
+
+            // 箭等白名单：保留（修复箭莫名消失）
+            if (isAllowedVanilla(stack)) {
                 continue;
             }
 
@@ -581,6 +662,7 @@ public class InventoryLockListener implements Listener {
             }
 
             if (!isCustomItem(items, stack)) {
+                // 其它原版杂物清除
                 inv.setItem(i, null);
                 continue;
             }
@@ -590,21 +672,19 @@ public class InventoryLockListener implements Listener {
             one.setAmount(1);
             if (!tryPlaceInLegalSlot(player, items, one)) {
                 player.getWorld().dropItemNaturally(player.getLocation(), one);
-                player.sendMessage("§e[DFS] 背包中的自定义物品无空固定槽，已掉落在地。");
             }
         }
 
-        // 2) 热键错槽
+        // 热键错槽
         for (int i = 0; i <= 8; i++) {
             ItemStack stack = inv.getItem(i);
+            if (isAllowedVanilla(stack)) {
+                continue;
+            }
             if (!isCustomItem(items, stack) || isShield(items, stack)) {
                 continue;
             }
             if (canPlaceInHotbar(items, stack, i)) {
-                // 合法但 amount>1 已由 split 处理
-                if (stack.getAmount() > 1 && ItemPlacement.isNonStackable(items, stack)) {
-                    // 再保险
-                }
                 continue;
             }
             inv.setItem(i, null);
@@ -612,11 +692,10 @@ public class InventoryLockListener implements Listener {
             one.setAmount(1);
             if (!tryPlaceInLegalSlot(player, items, one)) {
                 player.getWorld().dropItemNaturally(player.getLocation(), one);
-                player.sendMessage("§e[DFS] 热键槽物品位置非法且无空位，已掉落。");
             }
         }
 
-        // 3) 光标
+        // 光标自定义
         ItemStack cursor = player.getItemOnCursor();
         if (isCustomItem(items, cursor) && !isShield(items, cursor)) {
             ItemStack clone = cursor.clone();
@@ -631,6 +710,12 @@ public class InventoryLockListener implements Listener {
         if (isEmpty(stack)) {
             return true;
         }
+        if (isAllowedVanilla(stack)) {
+            // 箭：直接 add
+            var left = player.getInventory().addItem(stack);
+            return left.isEmpty();
+        }
+
         stack.setAmount(1);
 
         if (isShield(items, stack)) {
@@ -675,6 +760,10 @@ public class InventoryLockListener implements Listener {
 
         return false;
     }
+
+    // =====================================================================
+    // helpers
+    // =====================================================================
 
     private void relocateOrDrop(Player player, ItemManager items, ItemStack stack) {
         if (isEmpty(stack)) {
@@ -721,17 +810,13 @@ public class InventoryLockListener implements Listener {
         stack.setItemMeta(meta);
     }
 
-    // =====================================================================
-    // helpers
-    // =====================================================================
-
     private boolean allowOffhandClick(ItemManager items, ItemStack cursor, ItemStack current, InventoryAction action) {
         switch (action) {
             case PICKUP_ALL, PICKUP_HALF, PICKUP_ONE, PICKUP_SOME,
                  MOVE_TO_OTHER_INVENTORY, HOTBAR_SWAP,
                  SWAP_WITH_CURSOR, DROP_ALL_SLOT, DROP_ONE_SLOT,
                  DROP_ALL_CURSOR, DROP_ONE_CURSOR -> {
-                if (!isEmpty(current) && (isShield(items, current) || items.isUndroppable(current))) {
+                if (!isEmpty(current) && isShield(items, current)) {
                     return false;
                 }
             }
@@ -747,6 +832,10 @@ public class InventoryLockListener implements Listener {
     private boolean canPlaceInHotbar(ItemManager items, ItemStack stack, int hotbarSlot) {
         if (isShield(items, stack)) {
             return false;
+        }
+        if (isAllowedVanilla(stack)) {
+            // 箭不要进 0/1/2 固定武器位更干净，允许 3–8
+            return hotbarSlot >= 3 && hotbarSlot <= 8;
         }
         String type = getType(stack);
         String id = items.getItemId(stack);
@@ -766,6 +855,16 @@ public class InventoryLockListener implements Listener {
             return !InventorySlots.isLockedSkillSlot(hotbarSlot);
         }
         return InventorySlots.canPlaceInHotbar(type, slotHint, hotbarSlot);
+    }
+
+    private boolean isAllowedVanilla(ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) {
+            return false;
+        }
+        return switch (stack.getType()) {
+            case ARROW, SPECTRAL_ARROW, TIPPED_ARROW -> true;
+            default -> false;
+        };
     }
 
     private boolean isCustomItem(ItemManager items, ItemStack stack) {

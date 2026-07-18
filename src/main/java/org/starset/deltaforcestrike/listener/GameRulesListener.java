@@ -32,6 +32,7 @@ import org.starset.deltaforcestrike.item.ItemManager;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.round.RoundState;
+import org.starset.deltaforcestrike.util.DeathDrops;
 import org.starset.deltaforcestrike.util.Worlds;
 
 import java.time.Duration;
@@ -47,16 +48,6 @@ public class GameRulesListener implements Listener {
         this.rules = rules;
     }
 
-    /** 仅竞技世界 + 正式对局 COMBAT 时：致死旁观、禁自然回血等 */
-    private boolean appliesCombatRules(Player player) {
-        if (!Worlds.isArena(player)) return false;
-        if (!plugin.getMatchManager().isInMatch(player)) return false;
-        Match match = plugin.getMatchManager().getMatch();
-        if (match == null || match.getState() != MatchState.IN_PROGRESS) return false;
-        return match.getRoundManager().getState() == RoundState.COMBAT
-                || match.getRoundManager().getState() == RoundState.BUY;
-    }
-
     private boolean appliesFoodAndRegen(Player player) {
         if (!Worlds.isArena(player)) return false;
         return plugin.getMatchManager().isInMatch(player);
@@ -66,8 +57,10 @@ public class GameRulesListener implements Listener {
         if (!Worlds.isArena(player)) return false;
         if (!plugin.getMatchManager().isInMatch(player)) return false;
         Match match = plugin.getMatchManager().getMatch();
-        return match != null && match.getState() == MatchState.IN_PROGRESS
-                && match.getRoundManager().getState() == RoundState.COMBAT;
+        return match != null
+                && match.getState() == MatchState.IN_PROGRESS
+                && (match.getRoundManager().getState() == RoundState.COMBAT
+                || match.getRoundManager().getState() == RoundState.BOMB_PLANTED);
     }
 
     @EventHandler
@@ -130,7 +123,11 @@ public class GameRulesListener implements Listener {
             killer = findKillerPlayer(by);
         }
 
-        KillInfo killInfo = resolveKillInfo(player, event, killer);
+        KillInfo killInfo = resolveKillInfo(event, killer);
+
+        // 先掉落再旁观
+        DeathDrops.dropAndClearLoadout(player);
+
         showDeathTitle(player, killInfo);
         broadcastKill(player, killInfo);
         enterSpectator(player);
@@ -223,16 +220,14 @@ public class GameRulesListener implements Listener {
         }
     }
 
-    private KillInfo resolveKillInfo(Player victim, EntityDamageEvent event, Player killerPlayer) {
+    private KillInfo resolveKillInfo(EntityDamageEvent event, Player killerPlayer) {
         KillInfo info = new KillInfo();
         info.causeLabel = causeLabel(event.getCause());
-
         if (killerPlayer != null) {
             info.killerName = killerPlayer.getName();
             info.weaponName = weaponDisplay(killerPlayer.getInventory().getItemInMainHand());
             return info;
         }
-
         if (event instanceof EntityDamageByEntityEvent by) {
             Entity damager = by.getDamager();
             if (damager instanceof Projectile proj) {

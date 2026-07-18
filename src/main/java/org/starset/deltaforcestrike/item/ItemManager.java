@@ -216,8 +216,13 @@ public class ItemManager {
         if (pieces.containsKey("boots")) {
             player.getInventory().setBoots(taggedArmor(pieces.get("boots"), def));
         }
+
+        // 铁甲附带盾：也可只在 ItemGiveService 做一份，两处做一处即可
+        // 这里不重复发盾，统一由 ItemGiveService 处理
+
         return true;
     }
+
 
     // ------------------------------------------------------------------
     // Meta / 附魔 / 消失诅咒 / 不堆叠

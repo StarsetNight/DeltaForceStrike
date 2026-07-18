@@ -1,7 +1,5 @@
 package org.starset.deltaforcestrike.util;
 
-import org.bukkit.inventory.EquipmentSlot;
-
 public final class InventorySlots {
 
     private InventorySlots() {}
@@ -51,9 +49,7 @@ public final class InventorySlots {
     }
 
     private static int preferredByType(String type) {
-        if (type == null) {
-            return MELEE;
-        }
+        if (type == null) return MELEE;
         return switch (type.toLowerCase()) {
             case "melee" -> MELEE;
             case "ranged" -> RANGED;
@@ -68,28 +64,9 @@ public final class InventorySlots {
 
     public static boolean canPlaceInHotbar(String type, String slotHint, int hotbarSlot) {
         int preferred = preferredHotbarSlot(type, slotHint);
-        if (preferred == -2 || preferred == -3) {
-            return false;
-        }
-        if (preferred == UTIL_1) {
-            return isUtility(hotbarSlot);
-        }
-        if (preferred < 0) {
-            return isHotbar(hotbarSlot);
-        }
+        if (preferred == -2 || preferred == -3) return false;
+        if (preferred == UTIL_1) return isUtility(hotbarSlot);
+        if (preferred < 0) return isHotbar(hotbarSlot);
         return hotbarSlot == preferred;
-    }
-
-    public static EquipmentSlot armorPart(String part) {
-        if (part == null) {
-            return null;
-        }
-        return switch (part.toLowerCase()) {
-            case "helmet" -> EquipmentSlot.HEAD;
-            case "chestplate" -> EquipmentSlot.CHEST;
-            case "leggings" -> EquipmentSlot.LEGS;
-            case "boots" -> EquipmentSlot.FEET;
-            default -> null;
-        };
     }
 }

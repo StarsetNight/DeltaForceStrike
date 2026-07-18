@@ -49,25 +49,15 @@ public class Match {
         scoreCT = tmp;
     }
 
-    public int size() {
-        return sessions.size();
-    }
-
-    public boolean isFull(int max) {
-        return sessions.size() >= max;
-    }
-
-    public boolean contains(UUID uuid) {
-        return sessions.containsKey(uuid);
-    }
+    public int size() { return sessions.size(); }
+    public boolean isFull(int max) { return sessions.size() >= max; }
+    public boolean contains(UUID uuid) { return sessions.containsKey(uuid); }
 
     public List<Player> onlinePlayers() {
         List<Player> list = new ArrayList<>();
         for (UUID id : sessions.keySet()) {
             Player p = Bukkit.getPlayer(id);
-            if (p != null && p.isOnline()) {
-                list.add(p);
-            }
+            if (p != null && p.isOnline()) list.add(p);
         }
         return list;
     }
@@ -77,23 +67,17 @@ public class Match {
     }
 
     public void broadcast(String msg) {
-        for (Player p : onlinePlayers()) {
-            p.sendMessage(msg);
-        }
+        for (Player p : onlinePlayers()) p.sendMessage(msg);
     }
 
     public void broadcast(Component component) {
-        for (Player p : onlinePlayers()) {
-            p.sendMessage(component);
-        }
+        for (Player p : onlinePlayers()) p.sendMessage(component);
     }
 
-    /** 该队有连接中的队员，且全部不存活 */
     public boolean allDead(Team team) {
         boolean any = false;
         for (PlayerSession s : sessions.values()) {
-            if (s.getTeam() != team) continue;
-            if (!s.isConnected()) continue;
+            if (s.getTeam() != team || !s.isConnected()) continue;
             any = true;
             if (s.isAlive()) return false;
         }

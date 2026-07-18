@@ -16,7 +16,6 @@ public class PlayerSession {
     private boolean alive = true;
     private int consecutiveLosses;
     private boolean connected = true;
-    private boolean survivedLastRound = true;
 
     public PlayerSession(Player player, int startMoney) {
         this.uuid = player.getUniqueId();
@@ -49,6 +48,4 @@ public class PlayerSession {
     public void setConsecutiveLosses(int n) { this.consecutiveLosses = Math.max(0, n); }
     public boolean isConnected() { return connected; }
     public void setConnected(boolean connected) { this.connected = connected; }
-    public boolean isSurvivedLastRound() { return survivedLastRound; }
-    public void setSurvivedLastRound(boolean v) { this.survivedLastRound = v; }
 }

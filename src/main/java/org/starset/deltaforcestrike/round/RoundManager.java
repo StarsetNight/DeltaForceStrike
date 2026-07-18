@@ -1,5 +1,9 @@
 package org.starset.deltaforcestrike.round;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
@@ -12,9 +16,11 @@ import org.starset.deltaforcestrike.item.ItemManager;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
+import org.starset.deltaforcestrike.shop.ShopGUI;
 import org.starset.deltaforcestrike.util.ArenaCleanup;
 import org.starset.deltaforcestrike.util.InventorySlots;
 
+import java.time.Duration;
 import java.util.List;
 
 public class RoundManager {
@@ -35,6 +41,10 @@ public class RoundManager {
         return state;
     }
 
+    public int getSecondsLeft() {
+        return secondsLeft;
+    }
+
     public void startNextRound() {
         int winTarget = plugin.getConfig().getInt("match.win-target", 5);
         int maxRounds = plugin.getConfig().getInt("match.max-rounds", 8);
@@ -46,8 +56,6 @@ public class RoundManager {
             return;
         }
 
-        // 半场换边：刚打完 half-round 局（currentRound == halfRound）后、开下一局前
-        // 例如 half=4：第 4 回合结束后 currentRound 仍是 4，下一回合前换边
         if (!halfTimeSwapped
                 && match.getCurrentRound() >= halfRound
                 && match.getCurrentRound() < maxRounds
@@ -57,21 +65,17 @@ public class RoundManager {
         }
 
         match.setCurrentRound(match.getCurrentRound() + 1);
-
         for (PlayerSession s : match.getSessions().values()) {
             if (s.isConnected()) {
                 s.setAlive(true);
             }
         }
-
         startBuyPhase();
     }
 
-    /**
-     * 半场换边：玩家 T↔CT，比分对调（分仍挂在同一批人身上）。
-     */
     private void doHalfTimeSwap(int halfRound) {
         halfTimeSwapped = true;
+        int startMoney = plugin.getConfig().getInt("economy.start-money", 800);
 
         for (PlayerSession s : match.getSessions().values()) {
             if (s.getTeam() == Team.T) {
@@ -79,31 +83,34 @@ public class RoundManager {
             } else if (s.getTeam() == Team.CT) {
                 s.setTeam(Team.T);
             }
+            s.setMoney(startMoney);
+            s.setConsecutiveLosses(0);
         }
-
-        // 比分随边显示：换边后对调
         match.swapScores();
 
-        // 换边后 T 需要包，CT 不应持有包：简单处理 — 清所有人 bomb 槽，稍后 BUY 给新 T 发
         for (Player p : match.onlinePlayers()) {
-            ItemStack bombSlot = p.getInventory().getItem(InventorySlots.BOMB);
-            if (bombSlot != null) {
-                p.getInventory().setItem(InventorySlots.BOMB, null);
-            }
+            p.getInventory().clear();
+            p.getInventory().setHelmet(null);
+            p.getInventory().setChestplate(null);
+            p.getInventory().setLeggings(null);
+            p.getInventory().setBoots(null);
+            p.getInventory().setItemInOffHand(null);
+            p.setGameMode(GameMode.ADVENTURE);
         }
 
-        match.broadcast("§6§l[DFS] 半场结束（" + halfRound + " 回合）！双方交换攻防！");
-        match.broadcast("§7比分 §cT " + match.getScoreT() + " §7- §b" + match.getScoreCT() + " CT §8(已换边)");
-        plugin.getScoreboardService().updateAll(match);
+        match.broadcast("§6§l[DFS] 半场结束（" + halfRound + " 回合）！交换攻防！");
+        match.broadcast("§e金钱与装备已重置。§7 比分 §cT " + match.getScoreT()
+                + " §7- §b" + match.getScoreCT() + " CT");
+        refreshUi();
     }
 
     private void startBuyPhase() {
         cancel();
+        plugin.getBombManager().reset();
+        ArenaCleanup.clearDrops();
+
         state = RoundState.BUY;
         secondsLeft = plugin.getConfig().getInt("round.prepare-time", 15);
-
-        // 回合开始：清掉落（含上一回合残留）
-        ArenaCleanup.clearDrops();
 
         match.broadcast("§e[DFS] 第 §f" + match.getCurrentRound()
                 + " §e回合 · 购买阶段 §f" + secondsLeft + "s");
@@ -113,28 +120,41 @@ public class RoundManager {
 
         for (Player p : match.onlinePlayers()) {
             PlayerSession s = match.getSession(p.getUniqueId());
-            if (s == null || !s.hasTeam()) continue;
+            if (s == null || !s.hasTeam()) {
+                continue;
+            }
 
-            p.setGameMode(GameMode.SURVIVAL);
+            p.setGameMode(GameMode.ADVENTURE);
             p.setInvulnerable(false);
             p.setFallDistance(0f);
             plugin.getGameRulesService().fillHealth(p);
             plugin.getGameRulesService().fillFood(p);
             plugin.getMatchManager().teleportTeamSpawn(p, s.getTeam());
 
-            // ===== 保留装备：不再 inventory.clear() =====
             ensureBaselineLoadout(p, s, give, items);
-
-            p.sendMessage("§6[DFS] 资金: §e$" + s.getMoney() + " §7(装备已保留)");
+            p.sendMessage("§6资金: §e$" + s.getMoney() + " §7| §a/dfs shop");
         }
 
-        plugin.getScoreboardService().updateAll(match);
+        refreshUi();
+
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (state != RoundState.BUY) {
+                return;
+            }
+            for (Player p : match.onlinePlayers()) {
+                PlayerSession s = match.getSession(p.getUniqueId());
+                if (s != null && s.hasTeam() && s.isAlive()) {
+                    ShopGUI.open(p);
+                }
+            }
+        }, 5L);
 
         task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (state != RoundState.BUY) {
                 cancel();
                 return;
             }
+            actionBarAll("§e购买阶段 §f" + secondsLeft + "s §7| §a/dfs shop");
             if (secondsLeft <= 0) {
                 startCombatPhase();
                 return;
@@ -142,94 +162,145 @@ public class RoundManager {
             if (secondsLeft <= 5) {
                 match.broadcast("§e购买阶段剩余 §c" + secondsLeft + "s");
             }
-            // 每秒刷计分板（金钱等）
-            if (secondsLeft % 2 == 0) {
-                plugin.getScoreboardService().updateAll(match);
-            }
+            refreshUi();
             secondsLeft--;
-        }, 20L, 20L);
+        }, 0L, 20L);
     }
 
     /**
-     * 只补「没有的基础件」，不删已有枪械/道具/护甲。
+     * 木剑 + T 包；不发盾。
+     * 有弓弩：箭补满到 15。
      */
     private void ensureBaselineLoadout(Player p, PlayerSession s,
                                        ItemGiveService give, ItemManager items) {
         PlayerInventory inv = p.getInventory();
 
-        // 近战空则木剑
         ItemStack melee = inv.getItem(InventorySlots.MELEE);
         if (melee == null || melee.getType().isAir()) {
             give.give(p, "standard", true);
         }
 
-        // 盾：副手没有盾则补
-        ItemStack off = inv.getItemInOffHand();
-        if (!items.isShield(off)) {
-            give.give(p, "shield", true);
-        }
-
-        // 改造 TNT：仅 T；CT 若还拿着则清掉
         if (s.getTeam() == Team.T) {
             ItemStack bomb = inv.getItem(InventorySlots.BOMB);
-            boolean hasBomb = bomb != null && !bomb.getType().isAir()
-                    && "bomb".equalsIgnoreCase(items.getItemType(bomb));
-            if (!hasBomb) {
+            boolean has = bomb != null && !bomb.getType().isAir() && isBombItem(items, bomb);
+            if (!has) {
                 if (!give.give(p, "plant-bomb", true)) {
                     give.give(p, "bomb.plant-bomb", true);
                 }
             }
         } else {
+            // CT：移除改造 TNT
             ItemStack bomb = inv.getItem(InventorySlots.BOMB);
-            if (bomb != null && !bomb.getType().isAir()) {
-                String type = items.getItemType(bomb);
-                String id = items.getItemId(bomb);
-                if ("bomb".equalsIgnoreCase(type)
-                        || (id != null && id.contains("plant"))) {
-                    inv.setItem(InventorySlots.BOMB, null);
-                }
+            if (bomb != null && isBombItem(items, bomb)) {
+                inv.setItem(InventorySlots.BOMB, null);
             }
         }
+
+        // 有远程武器：弹药回满 15
+        if (give.hasRangedWeapon(p)) {
+            int target = plugin.getConfig().getInt("shop.arrows-per-ranged",
+                    ItemGiveService.ARROWS_WITH_RANGED);
+            give.refillArrowsTo(p, target);
+        }
+    }
+
+    private boolean isBombItem(ItemManager items, ItemStack stack) {
+        if (stack == null) {
+            return false;
+        }
+        if ("bomb".equalsIgnoreCase(items.getItemType(stack))) {
+            return true;
+        }
+        String id = items.getItemId(stack);
+        return id != null && id.contains("plant-bomb");
     }
 
     private void startCombatPhase() {
         cancel();
+        for (Player p : match.onlinePlayers()) {
+            p.closeInventory();
+            p.setGameMode(GameMode.ADVENTURE);
+        }
+
         state = RoundState.COMBAT;
         secondsLeft = plugin.getConfig().getInt("round.combat-time", 100);
         match.broadcast("§c§l[DFS] 战斗开始！");
-        plugin.getScoreboardService().updateAll(match);
+        refreshUi();
 
         task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (state != RoundState.COMBAT) {
                 cancel();
                 return;
             }
+            actionBarAll("§c⏱ 进攻时间 §f" + formatTime(secondsLeft));
             if (secondsLeft <= 0) {
-                endRound(Team.CT, "时间耗尽，防守方胜利");
+                endRound(Team.CT, "进攻超时，防守方胜利");
                 return;
             }
-            if (secondsLeft % 5 == 0) {
-                plugin.getScoreboardService().updateAll(match);
-            }
+            refreshUi();
             secondsLeft--;
-        }, 20L, 20L);
+        }, 0L, 20L);
     }
 
-    public void checkWipe() {
-        if (state != RoundState.COMBAT) return;
-        if (match.allDead(Team.T)) {
-            endRound(Team.CT, "进攻方全灭");
-        } else if (match.allDead(Team.CT)) {
+    public void onBombPlanted() {
+        if (state != RoundState.COMBAT) {
+            return;
+        }
+        cancel();
+        state = RoundState.BOMB_PLANTED;
+        secondsLeft = plugin.getBombManager().getFuseLeft();
+        match.broadcast("§c[DFS] 拆弹阶段！");
+        refreshUi();
+
+        // 安包瞬间若 CT 已全灭，直接 T 胜
+        if (match.allDead(Team.CT)) {
             endRound(Team.T, "防守方全灭");
+            return;
+        }
+
+        task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (state != RoundState.BOMB_PLANTED) {
+                cancel();
+                return;
+            }
+            int fuse = plugin.getBombManager().getFuseLeft();
+            secondsLeft = fuse;
+            if (fuse >= 0) {
+                actionBarAll("§4💣 爆炸倒计时 §c" + fuse + "s");
+            }
+            refreshUi();
+        }, 0L, 10L);
+    }
+
+    /**
+     * 歼灭判定：
+     * - CT 全灭 → 始终 T 胜（含已安包）
+     * - 未安包 T 全灭 → CT 胜
+     * - 已安包 T 全灭 → 不结束，等拆/炸
+     */
+    public void checkWipe() {
+        if (state != RoundState.COMBAT && state != RoundState.BOMB_PLANTED) {
+            return;
+        }
+
+        if (match.allDead(Team.CT)) {
+            endRound(Team.T, "防守方全灭");
+            return;
+        }
+
+        if (state == RoundState.COMBAT && match.allDead(Team.T)) {
+            endRound(Team.CT, "进攻方全灭");
         }
     }
 
     public void endRound(Team winner, String reason) {
-        if (state == RoundState.ROUND_END || state == RoundState.IDLE) return;
+        if (state == RoundState.ROUND_END || state == RoundState.IDLE) {
+            return;
+        }
         cancel();
         state = RoundState.ROUND_END;
 
-        // 回合结束立刻清掉落
+        plugin.getBombManager().reset();
         ArenaCleanup.clearDrops();
 
         match.addScore(winner);
@@ -238,13 +309,17 @@ public class RoundManager {
         match.broadcast("§6[DFS] 回合结束: §f" + reason);
         match.broadcast("§7比分 §cT " + match.getScoreT() + " §7- §b" + match.getScoreCT() + " CT");
 
-        plugin.getScoreboardService().updateAll(match);
+        // 胜负标题
+        showRoundResultTitles(winner, reason);
+
+        refreshUi();
 
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            ArenaCleanup.clearDrops(); // 结算等待期再清一次
+            ArenaCleanup.clearDrops();
             startNextRound();
         }, 5 * 20L);
     }
+
 
     private void applyEconomy(Team winner) {
         int winMoney = plugin.getConfig().getInt("economy.victory-bonus", 3200);
@@ -255,7 +330,9 @@ public class RoundManager {
         int pistol = plugin.getConfig().getInt("economy.pistol-round-bonus", 2400);
 
         for (PlayerSession s : match.getSessions().values()) {
-            if (!s.hasTeam()) continue;
+            if (!s.hasTeam()) {
+                continue;
+            }
             if (s.getTeam() == winner) {
                 s.addMoney(winMoney);
                 s.setConsecutiveLosses(0);
@@ -265,8 +342,7 @@ public class RoundManager {
                 if (match.getCurrentRound() == 1) {
                     s.addMoney(pistol);
                 } else {
-                    int idx = Math.min(losses - 1, defeat.size() - 1);
-                    s.addMoney(defeat.get(idx));
+                    s.addMoney(defeat.get(Math.min(losses - 1, defeat.size() - 1)));
                 }
             }
         }
@@ -275,22 +351,84 @@ public class RoundManager {
     private void endMatchByScore() {
         cancel();
         state = RoundState.IDLE;
+        plugin.getBombManager().reset();
         ArenaCleanup.clearDrops();
-
         String msg;
         if (match.getScoreT() > match.getScoreCT()) {
-            msg = "进攻方 T 获胜！最终 §c" + match.getScoreT() + "§7-§b" + match.getScoreCT();
+            msg = "进攻方 T 获胜！§c" + match.getScoreT() + "§7-§b" + match.getScoreCT();
         } else if (match.getScoreCT() > match.getScoreT()) {
-            msg = "防守方 CT 获胜！最终 §c" + match.getScoreT() + "§7-§b" + match.getScoreCT();
+            msg = "防守方 CT 获胜！§c" + match.getScoreT() + "§7-§b" + match.getScoreCT();
         } else {
             msg = "平局！§c" + match.getScoreT() + "§7-§b" + match.getScoreCT();
         }
         plugin.getMatchManager().forceEnd(msg);
     }
 
+    private void actionBarAll(String msg) {
+        Component c = Component.text(msg);
+        for (Player p : match.onlinePlayers()) {
+            p.sendActionBar(c);
+        }
+    }
+
+    private String formatTime(int sec) {
+        sec = Math.max(0, sec);
+        return (sec / 60) + ":" + String.format("%02d", sec % 60);
+    }
+
+    private void refreshUi() {
+        if (plugin.getScoreboardService() != null) {
+            plugin.getScoreboardService().updateAll(match);
+        }
+        if (plugin.getTabListService() != null) {
+            plugin.getTabListService().updateAll(match);
+        }
+    }
+
+    private void showRoundResultTitles(Team winner, String reason) {
+        Title.Times times = Title.Times.times(
+                Duration.ofMillis(150),
+                Duration.ofSeconds(3),
+                Duration.ofMillis(500)
+        );
+
+        Component winMain = Component.text("回合胜利", NamedTextColor.GREEN, TextDecoration.BOLD);
+        Component loseMain = Component.text("回合败北", NamedTextColor.RED, TextDecoration.BOLD);
+        Component sub = Component.text(reason == null ? "" : reason, NamedTextColor.GRAY);
+        Component score = Component.text(
+                "比分 T " + match.getScoreT() + " - " + match.getScoreCT() + " CT",
+                NamedTextColor.YELLOW
+        );
+
+        for (Player p : match.onlinePlayers()) {
+            PlayerSession s = match.getSession(p.getUniqueId());
+            if (s == null || !s.hasTeam()) {
+                // 观战/无队伍：只显示结算
+                p.showTitle(Title.title(
+                        Component.text("回合结束", NamedTextColor.GOLD, TextDecoration.BOLD),
+                        score,
+                        times
+                ));
+                continue;
+            }
+
+            boolean won = s.getTeam() == winner;
+            Component subtitle = sub.append(Component.text(" · ", NamedTextColor.DARK_GRAY)).append(score);
+
+            if (won) {
+                p.showTitle(Title.title(winMain, subtitle, times));
+                p.playSound(p.getLocation(), org.bukkit.Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.7f, 1.2f);
+            } else {
+                p.showTitle(Title.title(loseMain, subtitle, times));
+                p.playSound(p.getLocation(), org.bukkit.Sound.ENTITY_VILLAGER_NO, 0.8f, 0.8f);
+            }
+        }
+    }
+
     public void shutdown() {
         cancel();
         state = RoundState.IDLE;
+        plugin.getBombManager().reset();
     }
 
     private void cancel() {

@@ -9,6 +9,7 @@ import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 import org.starset.deltaforcestrike.DeltaForceStrike;
+import org.starset.deltaforcestrike.round.RoundState;
 import org.starset.deltaforcestrike.util.ArenaCleanup;
 import org.starset.deltaforcestrike.util.ConfigKeys;
 import org.starset.deltaforcestrike.util.Worlds;
@@ -19,10 +20,10 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * 全服唯一对局管理器。
- * 仅处理世界 {@code delta_force_strike}（见 config world.arena）。
+ * 全服唯一对局。
+ * 仅处理竞技世界（config: world.arena，默认 delta_force_strike）。
  * <p>
- * 流程：WAITING →（满人）COUNTDOWN（选队）→ AGENT_SELECT（可关）→ IN_PROGRESS → ENDING → WAITING
+ * WAITING → COUNTDOWN（选队）→ AGENT_SELECT（可关）→ IN_PROGRESS → ENDING → WAITING
  */
 public class MatchManager {
 
@@ -74,14 +75,11 @@ public class MatchManager {
         return isInMatch(player)
                 && match != null
                 && match.getState() == MatchState.IN_PROGRESS
-                && match.getRoundManager().getState()
-                == org.starset.deltaforcestrike.round.RoundState.COMBAT;
+                && match.getRoundManager().getState() == RoundState.COMBAT;
     }
 
     /**
      * 是否禁止新人加入。
-     * 对局中 / 选干员 / 结束中 始终锁定；
-     * 倒计时是否锁定由 queue.lock-during-countdown 控制。
      */
     public boolean isJoinLocked() {
         if (match == null) {
@@ -104,7 +102,6 @@ public class MatchManager {
     // 进竞技世界 / 入队
     // =====================================================================
 
-    /** 玩家进入竞技世界时调用 */
     public void handleEnterArena(Player player) {
         if (!Worlds.isArena(player)) {
             return;
@@ -123,8 +120,8 @@ public class MatchManager {
         }
 
         if (match != null && match.contains(player.getUniqueId())) {
-            // 已在队列：刷新计分板即可
             safeScoreboardCreate(player);
+            safeTabUpdate(player);
             safeScoreboardUpdateAll();
             return true;
         }
@@ -150,18 +147,20 @@ public class MatchManager {
 
         player.setGameMode(GameMode.ADVENTURE);
         player.setFallDistance(0f);
-        player.setInvulnerable(true); // 排队防摔；开打 BUY 时会关
+        player.setInvulnerable(true);
         teleportQueue(player);
         plugin.getGameRulesService().fillFood(player);
         plugin.getGameRulesService().fillHealth(player);
 
         safeScoreboardCreate(player);
+        safeTabUpdate(player);
 
         match.broadcast("§a[DFS] §f" + player.getName()
                 + " §7加入队列 §8(§e" + match.size() + "§8/§e" + max + "§8)");
 
         sendQueueActionBar();
         safeScoreboardUpdateAll();
+        safeTabUpdateAll();
         checkAutoStart();
         return true;
     }
@@ -180,6 +179,7 @@ public class MatchManager {
 
         match.getSessions().remove(player.getUniqueId());
         safeScoreboardRemove(player);
+        safeTabReset(player);
 
         player.setInvulnerable(false);
         match.broadcast("§e[DFS] §f" + player.getName() + " §7已离开。 §8(" + match.size() + ")");
@@ -202,6 +202,7 @@ public class MatchManager {
         }
 
         safeScoreboardUpdateAll();
+        safeTabUpdateAll();
         sendQueueActionBar();
     }
 
@@ -219,7 +220,7 @@ public class MatchManager {
         }
     }
 
-    /** 管理员强制进入倒计时（调试用） */
+    /** 管理员强制进入倒计时 */
     public void forceStartCountdown() {
         if (match == null) {
             resetMatchWaiting();
@@ -250,6 +251,7 @@ public class MatchManager {
         match.broadcast("§6[DFS] §e准备开始！§f" + countdownLeft
                 + " §e秒。使用 §a/dfs team t §e或 §b/dfs team ct §e选择队伍。");
         safeScoreboardUpdateAll();
+        safeTabUpdateAll();
 
         countdownTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (match == null || match.getState() != MatchState.COUNTDOWN) {
@@ -261,8 +263,6 @@ public class MatchManager {
             boolean cancelIfNotFull = plugin.getConfig()
                     .getBoolean("queue.cancel-if-not-full", true);
 
-            // 管理员 force 且人不满：若 cancel-if-not-full=true 会取消
-            // 测试时请把 max-players 改成当前人数，或 cancel-if-not-full: false
             if (cancelIfNotFull && match.size() < max) {
                 cancelCountdown("有人离开或人数不足，倒计时取消。");
                 return;
@@ -299,6 +299,7 @@ public class MatchManager {
             match.setState(MatchState.WAITING);
             match.broadcast("§c[DFS] " + reason + " §7返回等待。");
             safeScoreboardUpdateAll();
+            safeTabUpdateAll();
         }
     }
 
@@ -350,6 +351,7 @@ public class MatchManager {
         agentLeft = plugin.getConfig().getInt("operator.select-seconds", 45);
         match.broadcast("§d[DFS] 干员选择 " + agentLeft + "s — /dfs agent <id>");
         safeScoreboardUpdateAll();
+        safeTabUpdateAll();
 
         agentTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (match == null || match.getState() != MatchState.AGENT_SELECT) {
@@ -393,6 +395,7 @@ public class MatchManager {
         s.setOperatorId(operatorId);
         player.sendMessage("§a[DFS] 已选择干员: " + operatorId);
         safeScoreboardUpdate(player);
+        safeTabUpdate(player);
         return true;
     }
 
@@ -428,7 +431,6 @@ public class MatchManager {
         }
 
         long count = match.countTeam(team);
-        // 换队：目标满员则拒绝（自己已在对面时，目标人数不含自己）
         if (count >= teamSize) {
             player.sendMessage("§c[DFS] 该队伍已满（" + teamSize + "）。");
             return false;
@@ -445,6 +447,7 @@ public class MatchManager {
 
         sendQueueActionBar();
         safeScoreboardUpdateAll();
+        safeTabUpdateAll();
         return true;
     }
 
@@ -455,7 +458,6 @@ public class MatchManager {
 
         int teamSize = ConfigKeys.teamSize();
 
-        // 未选队：填到人少的一边
         for (PlayerSession s : match.getSessions().values()) {
             if (s.hasTeam()) {
                 continue;
@@ -483,12 +485,10 @@ public class MatchManager {
         long t = match.countTeam(Team.T);
         long ct = match.countTeam(Team.CT);
 
-        // 标准 3v3 且人数刚好
         if (all.size() == teamSize * 2 && t == teamSize && ct == teamSize) {
             return;
         }
 
-        // 调试人数（如 1v1）或失衡：洗牌对半分
         Collections.shuffle(all);
         if (all.size() == teamSize * 2) {
             for (int i = 0; i < all.size(); i++) {
@@ -513,8 +513,10 @@ public class MatchManager {
         cancelTasks();
         balanceTeamsIfNeeded();
 
-        // 开战前清一次掉落
         ArenaCleanup.clearDrops();
+        if (plugin.getBombManager() != null) {
+            plugin.getBombManager().reset();
+        }
 
         match.setState(MatchState.IN_PROGRESS);
         match.setCurrentRound(0);
@@ -526,6 +528,7 @@ public class MatchManager {
         }
 
         safeScoreboardUpdateAll();
+        safeTabUpdateAll();
         match.getRoundManager().startNextRound();
     }
 
@@ -537,6 +540,9 @@ public class MatchManager {
 
         match.setState(MatchState.ENDING);
         match.getRoundManager().shutdown();
+        if (plugin.getBombManager() != null) {
+            plugin.getBombManager().reset();
+        }
         ArenaCleanup.clearDrops();
 
         match.broadcast("§c[DFS] 对局结束: " + reason);
@@ -552,12 +558,12 @@ public class MatchManager {
             plugin.getGameRulesService().fillHealth(p);
             plugin.getGameRulesService().fillFood(p);
             safeScoreboardRemove(p);
+            safeTabReset(p);
         }
 
         safeScoreboardRemoveAll();
         resetMatchWaiting();
 
-        // 仍在竞技世界的玩家重新入队
         for (Player p : stillHere) {
             if (p.isOnline() && Worlds.isArena(p)) {
                 tryJoin(p);
@@ -566,7 +572,7 @@ public class MatchManager {
     }
 
     /**
-     * 战斗阶段淘汰（由 GameRulesListener 在致死旁观后调用）。
+     * 战斗阶段淘汰（致死旁观后由 GameRulesListener 调用）。
      */
     public void onPlayerEliminated(Player victim, Player killer) {
         if (match == null || match.getState() != MatchState.IN_PROGRESS) {
@@ -581,10 +587,7 @@ public class MatchManager {
 
         if (killer != null) {
             PlayerSession ks = match.getSession(killer.getUniqueId());
-            if (ks != null
-                    && match.contains(killer.getUniqueId())
-                    && ks.isAlive()) {
-                // 可选：禁止队友击杀给钱 — 简版只要 killer 在局内
+            if (ks != null && match.contains(killer.getUniqueId())) {
                 if (vs == null || vs.getTeam() != ks.getTeam()) {
                     ks.addKill();
                     ks.addMoney(plugin.getConfig().getInt("economy.kill-reward", 300));
@@ -593,6 +596,7 @@ public class MatchManager {
         }
 
         safeScoreboardUpdateAll();
+        safeTabUpdateAll();
         match.getRoundManager().checkWipe();
     }
 
@@ -643,7 +647,7 @@ public class MatchManager {
     }
 
     // =====================================================================
-    // 计分板安全调用（未接入时不崩）
+    // 计分板 / Tab 安全调用
     // =====================================================================
 
     private void safeScoreboardCreate(Player player) {
@@ -696,6 +700,36 @@ public class MatchManager {
         }
     }
 
+    private void safeTabUpdate(Player player) {
+        try {
+            if (plugin.getTabListService() != null) {
+                plugin.getTabListService().update(player);
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().warning("Tab update: " + t.getMessage());
+        }
+    }
+
+    private void safeTabUpdateAll() {
+        try {
+            if (plugin.getTabListService() != null && match != null) {
+                plugin.getTabListService().updateAll(match);
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().warning("Tab updateAll: " + t.getMessage());
+        }
+    }
+
+    private void safeTabReset(Player player) {
+        try {
+            if (plugin.getTabListService() != null) {
+                plugin.getTabListService().reset(player);
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().warning("Tab reset: " + t.getMessage());
+        }
+    }
+
     // =====================================================================
     // 任务 / 关闭 / 状态
     // =====================================================================
@@ -714,6 +748,9 @@ public class MatchManager {
     public void shutdown() {
         cancelTasks();
         safeScoreboardRemoveAll();
+        if (plugin.getBombManager() != null) {
+            plugin.getBombManager().reset();
+        }
         if (match != null) {
             match.getRoundManager().shutdown();
         }
