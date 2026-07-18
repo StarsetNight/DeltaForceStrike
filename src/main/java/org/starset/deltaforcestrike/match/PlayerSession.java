@@ -8,13 +8,15 @@ public class PlayerSession {
 
     private final UUID uuid;
     private final String name;
-    private Team team;
+    private Team team = Team.NONE;
+    private String operatorId;
     private int money;
     private int kills;
     private int deaths;
     private boolean alive = true;
     private int consecutiveLosses;
-    private String operatorId;
+    private boolean connected = true;
+    private boolean survivedLastRound = true;
 
     public PlayerSession(Player player, int startMoney) {
         this.uuid = player.getUniqueId();
@@ -25,7 +27,10 @@ public class PlayerSession {
     public UUID getUuid() { return uuid; }
     public String getName() { return name; }
     public Team getTeam() { return team; }
-    public void setTeam(Team team) { this.team = team; }
+    public void setTeam(Team team) { this.team = team == null ? Team.NONE : team; }
+    public boolean hasTeam() { return team == Team.T || team == Team.CT; }
+    public String getOperatorId() { return operatorId; }
+    public void setOperatorId(String operatorId) { this.operatorId = operatorId; }
     public int getMoney() { return money; }
     public void setMoney(int money) { this.money = Math.max(0, money); }
     public void addMoney(int amount) { setMoney(this.money + amount); }
@@ -42,6 +47,8 @@ public class PlayerSession {
     public void setAlive(boolean alive) { this.alive = alive; }
     public int getConsecutiveLosses() { return consecutiveLosses; }
     public void setConsecutiveLosses(int n) { this.consecutiveLosses = Math.max(0, n); }
-    public String getOperatorId() { return operatorId; }
-    public void setOperatorId(String operatorId) { this.operatorId = operatorId; }
+    public boolean isConnected() { return connected; }
+    public void setConnected(boolean connected) { this.connected = connected; }
+    public boolean isSurvivedLastRound() { return survivedLastRound; }
+    public void setSurvivedLastRound(boolean v) { this.survivedLastRound = v; }
 }

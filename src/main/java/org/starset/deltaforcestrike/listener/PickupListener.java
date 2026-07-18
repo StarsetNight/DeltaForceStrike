@@ -10,8 +10,11 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.item.ItemManager;
+import org.starset.deltaforcestrike.match.Match;
+import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.util.InventorySlots;
 import org.starset.deltaforcestrike.util.ItemPlacement;
+import org.starset.deltaforcestrike.util.Worlds;
 
 public class PickupListener implements Listener {
 
@@ -29,10 +32,10 @@ public class PickupListener implements Listener {
     }
 
     private boolean shouldLock(Player player) {
-        if (alwaysLock) {
-            return true;
-        }
-        return plugin.getGameManager().getMatchManager().isInMatch(player);
+        if (!Worlds.isArena(player)) return false;
+        if (!plugin.getMatchManager().isInMatch(player)) return false;
+        Match m = plugin.getMatchManager().getMatch();
+        return m != null && m.getState() == MatchState.IN_PROGRESS;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

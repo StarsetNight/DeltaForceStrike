@@ -20,8 +20,11 @@ import org.bukkit.persistence.PersistentDataType;
 import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.item.ItemKeys;
 import org.starset.deltaforcestrike.item.ItemManager;
+import org.starset.deltaforcestrike.match.Match;
+import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.util.InventorySlots;
 import org.starset.deltaforcestrike.util.ItemPlacement;
+import org.starset.deltaforcestrike.util.Worlds;
 
 import java.util.Locale;
 import java.util.UUID;
@@ -40,11 +43,15 @@ public class InventoryLockListener implements Listener {
     }
 
     public boolean shouldLock(Player player) {
-        if (alwaysLock) {
-            return true;
-        }
-        return plugin.getGameManager().getMatchManager().isInMatch(player);
+        if (!Worlds.isArena(player)) return false;
+        if (!plugin.getMatchManager().isInMatch(player)) return false;
+        Match match = plugin.getMatchManager().getMatch();
+        if (match == null) return false;
+        // 仅正式对局锁物品栏；排队期不锁（像大厅）
+        return match.getState() == MatchState.IN_PROGRESS
+                || match.getState() == MatchState.AGENT_SELECT;
     }
+
 
     // =====================================================================
     // 点击

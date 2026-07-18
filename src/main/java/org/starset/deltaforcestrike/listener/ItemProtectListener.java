@@ -9,6 +9,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.item.ItemKeys;
 import org.starset.deltaforcestrike.item.ItemManager;
+import org.starset.deltaforcestrike.util.Worlds;
 
 public class ItemProtectListener implements Listener {
 
@@ -20,6 +21,7 @@ public class ItemProtectListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onDeath(PlayerDeathEvent event) {
+        if (!Worlds.isArena(event.getEntity())) return;
         if (plugin.getConfig().getBoolean("player.drop-equipment", false)) {
             return;
         }
