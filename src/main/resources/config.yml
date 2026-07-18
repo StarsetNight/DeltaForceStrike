@@ -1,0 +1,61 @@
+# DeltaForceStrike 主配置 - 对齐《友谊之约：反制行动》GDD v0.1.0-a
+
+match:
+  half-round: 4          # MR4
+  win-target: 5          # 先获 5 胜
+  max-rounds: 8          # 4:4 平局
+  agent-select-time: 45  # 干员选择（秒）
+
+economy:
+  start-money: 800
+  victory-bonus: 3200
+  # 普通失败补偿（第1/2/3+败）
+  defeat-bonus:
+    - 1600
+    - 2000
+    - 2400
+  # 连败补偿（与失败补偿取较高或按 GDD 独立使用，代码里按连败档位）
+  loss-streak-bonus:
+    - 2000
+    - 2400
+    - 2800
+  pistol-round-bonus: 2400   # 手枪局（第1回合）失败默认一级补偿
+  kill-reward: 300
+  plant-reward: 300
+  defuse-reward: 200
+  ct-death-bonus-per-t: 100  # 每死 1 名 T，每名 CT +100
+
+shop:
+  # 与 round.prepare-time 保持一致；不要再单独用 30
+  enabled-in-prepare: true
+
+round:
+  prepare-time: 15       # 购买阶段
+  combat-time: 100       # 1:40
+  natural-regeneration: false
+  auto-food: true
+  difficulty: EASY
+
+player:
+  max-health: 20
+  keep-inventory: false
+  drop-equipment: false  # 护甲/盾不掉落，死亡消失
+  armor-vanish: true
+  allow-diamond-armor: false
+
+bomb:
+  plant-time: 3
+  explosion-time: 40
+  defuse-time: 10        # 默认拆除
+  defuse-time-with-kit: 5
+
+operator:
+  enabled: true
+
+game:
+  team-size: 3
+  max-player: 6
+  admin-spectator: true
+
+debug:
+  enabled: true

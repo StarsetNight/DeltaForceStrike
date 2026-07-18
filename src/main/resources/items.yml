@@ -1,0 +1,166 @@
+# DeltaForceStrike 物品配置
+# id 路径示例: weapons.standard / grenades.smoke / bomb.plant-bomb
+
+items:
+
+  weapons:
+    standard:
+      name: "§f标准"
+      type: melee
+      material: WOODEN_SWORD
+      price: 0
+      slot: melee
+
+    dragon:
+      name: "§b游龙"
+      type: melee
+      material: IRON_SWORD
+      price: 800
+      slot: melee
+      enchantments:
+        sharpness: 3
+
+    revolt:
+      name: "§6逆战"
+      type: melee
+      material: GOLDEN_AXE
+      price: 1800
+      slot: melee
+      enchantments:
+        unbreaking: 5
+
+    dominator:
+      name: "§3主宰"
+      type: melee
+      material: DIAMOND_SWORD
+      price: 2700
+      slot: melee
+
+    frenzy:
+      name: "§c狂袭"
+      type: melee
+      material: DIAMOND_AXE
+      price: 3700
+      slot: melee
+      enchantments:
+        sharpness: 6
+
+    light-bow:
+      name: "§f轻弓"
+      type: ranged
+      material: BOW
+      price: 800
+      slot: ranged
+
+    battle-crossbow:
+      name: "§f战弩"
+      type: ranged
+      material: CROSSBOW
+      price: 1200
+      slot: ranged
+
+    assault-bow:
+      name: "§b强袭弓"
+      type: ranged
+      material: BOW
+      price: 1800
+      slot: ranged
+      enchantments:
+        power: 3
+
+    rapid-crossbow:
+      name: "§b连发弩"
+      type: ranged
+      material: CROSSBOW
+      price: 2400
+      slot: ranged
+
+    hunting-bow:
+      name: "§c猎杀弓"
+      type: ranged
+      material: BOW
+      price: 4700
+      slot: ranged
+      enchantments:
+        power: 5
+
+  equipments:
+    leather-armor:
+      name: "§a轻型护甲"
+      type: armor
+      price: 650
+      # 套装：无单 material，用 kind: armor_set
+      kind: armor_set
+      armor:
+        helmet: LEATHER_HELMET
+        chestplate: LEATHER_CHESTPLATE
+        leggings: LEATHER_LEGGINGS
+        boots: LEATHER_BOOTS
+
+    iron-armor:
+      name: "§f重型护甲"
+      type: armor
+      price: 1000
+      kind: armor_set
+      armor:
+        helmet: IRON_HELMET
+        chestplate: IRON_CHESTPLATE
+        leggings: IRON_LEGGINGS
+        boots: IRON_BOOTS
+
+    shield:
+      name: "§b守护"
+      type: shield
+      material: SHIELD
+      price: 0
+      undroppable: true
+
+  grenades:
+    smoke:
+      name: "§7烟雾弹"
+      type: utility
+      material: FIREWORK_STAR
+      price: 300
+      action: smoke
+      slot: utility
+
+    incendiary:
+      name: "§6高爆火焰弹"
+      type: utility
+      material: FIRE_CHARGE
+      price: 300
+      action: explosion_fire
+      slot: utility
+
+    wither:
+      name: "§8凋零手雷"
+      type: utility
+      material: WITHER_SKELETON_SKULL
+      price: 500
+      action: wither
+      slot: utility
+
+  bomb:
+    plant-bomb:
+      name: "§c改造TNT"
+      type: bomb
+      material: TNT
+      price: 0
+      action: plant
+      slot: bomb
+
+    defuse-kit:
+      name: "§e拆除钳"
+      type: utility
+      material: SHEARS
+      price: 300
+      action: defuse
+      slot: utility
+
+  skill-charge:
+    charge:
+      name: "§d技能充能"
+      type: skill_charge
+      material: AMETHYST_SHARD
+      price: 400
+      action: skill_charge
