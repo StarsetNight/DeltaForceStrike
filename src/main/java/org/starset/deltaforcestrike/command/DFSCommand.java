@@ -29,7 +29,17 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> ROOT = List.of(
             "join", "leave", "team", "agent", "info", "shop", "guide",
-            "start", "stop", "give", "reload", "setspawn", "setsite", "help"
+            "start", "stop", "give", "reload", "config", "setspawn", "setsite", "help"
+    );
+
+    /** 可热改的对局/队列参数（path → 类型） */
+    private static final List<String> CONFIG_KEYS = List.of(
+            "team-size",
+            "max-players",
+            "cancel-if-not-full",
+            "half-round",
+            "win-target",
+            "max-rounds"
     );
 
     public DFSCommand(DeltaForceStrike plugin) {
@@ -56,6 +66,7 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             case "start" -> start(sender);
             case "stop" -> stop(sender);
             case "reload" -> reload(sender);
+            case "config", "cfg", "set" -> config(sender, args);
             case "give" -> give(sender, args);
             case "setspawn" -> setSpawn(sender, args);
             case "setsite" -> setSite(sender, args);
@@ -69,7 +80,8 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§6§l--- DeltaForceStrike ---");
         sender.sendMessage("§e/dfs join|leave|team|shop|guide|info|agent");
         if (sender.hasPermission("deltaforcestrike.admin")) {
-            sender.sendMessage("§c/dfs start|stop|reload|give|setspawn|setsite");
+            sender.sendMessage("§c/dfs start|stop|reload|config|give|setspawn|setsite");
+            sender.sendMessage("§7/dfs config [key] [value]  §8改队列/赛制并保存");
         }
     }
 
@@ -198,6 +210,161 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
                 : plugin.getOperatorService().getRegistry().allUnique().size()));
     }
 
+    /**
+     * /dfs config                     查看全部
+     * /dfs config &lt;key&gt;               查看单项
+     * /dfs config &lt;key&gt; &lt;value&gt;       修改并 saveConfig
+     */
+    private void config(CommandSender sender, String[] args) {
+        if (!admin(sender)) {
+            return;
+        }
+        if (args.length == 1) {
+            showAllConfig(sender);
+            return;
+        }
+        String key = args[1].toLowerCase(Locale.ROOT).replace('_', '-');
+        String path = configPathOf(key);
+        if (path == null) {
+            sender.sendMessage("§c未知键。可用: §e" + String.join("§7, §e", CONFIG_KEYS));
+            return;
+        }
+        if (args.length == 2) {
+            sender.sendMessage("§6[DFS] §e" + key + " §7= §f" + formatConfigValue(path, key)
+                    + " §8(" + path + ")");
+            return;
+        }
+
+        String valueRaw = args[2];
+        if (!applyConfigValue(sender, key, path, valueRaw)) {
+            return;
+        }
+        plugin.saveConfig();
+        sender.sendMessage("§a[DFS] 已设置 §e" + key + " §7= §f" + formatConfigValue(path, key)
+                + " §8并写入 config.yml");
+        sender.sendMessage("§7当前队列/赛制: §fteam-size="
+                + plugin.getConfig().getInt("queue.team-size")
+                + " max-players=" + plugin.getConfig().getInt("queue.max-players")
+                + " half=" + plugin.getConfig().getInt("match.half-round")
+                + " win=" + plugin.getConfig().getInt("match.win-target")
+                + " maxR=" + plugin.getConfig().getInt("match.max-rounds"));
+    }
+
+    private void showAllConfig(CommandSender sender) {
+        sender.sendMessage("§6§l[DFS] 可改参数 §7(/dfs config <key> <value>)");
+        for (String key : CONFIG_KEYS) {
+            String path = configPathOf(key);
+            if (path == null) {
+                continue;
+            }
+            sender.sendMessage("§e" + key + " §7= §f" + formatConfigValue(path, key)
+                    + " §8→ " + path);
+        }
+        sender.sendMessage("§7例: §f/dfs config max-players 10");
+        sender.sendMessage("§7例: §f/dfs config cancel-if-not-full false");
+    }
+
+    private static String configPathOf(String key) {
+        return switch (key) {
+            case "team-size", "teamsize" -> "queue.team-size";
+            case "max-players", "maxplayers", "max-player" -> "queue.max-players";
+            case "cancel-if-not-full", "cancelifnotfull", "cancel-full" -> "queue.cancel-if-not-full";
+            case "half-round", "halfround", "half" -> "match.half-round";
+            case "win-target", "wintarget", "win" -> "match.win-target";
+            case "max-rounds", "maxrounds", "rounds" -> "match.max-rounds";
+            default -> null;
+        };
+    }
+
+    private String formatConfigValue(String path, String key) {
+        var cfg = plugin.getConfig();
+        if (key.contains("cancel") || path.endsWith("cancel-if-not-full")) {
+            return String.valueOf(cfg.getBoolean(path));
+        }
+        return String.valueOf(cfg.getInt(path));
+    }
+
+    private boolean applyConfigValue(CommandSender sender, String key, String path, String raw) {
+        var cfg = plugin.getConfig();
+        if (path.equals("queue.cancel-if-not-full")) {
+            Boolean b = parseBoolean(raw);
+            if (b == null) {
+                sender.sendMessage("§c取值须为 true/false（或 on/off、1/0）");
+                return false;
+            }
+            cfg.set(path, b);
+            return true;
+        }
+
+        int n;
+        try {
+            n = Integer.parseInt(raw.trim());
+        } catch (NumberFormatException e) {
+            sender.sendMessage("§c请输入整数");
+            return false;
+        }
+
+        switch (key) {
+            case "team-size", "teamsize" -> {
+                if (n < 1 || n > 32) {
+                    sender.sendMessage("§cteam-size 范围 1–32");
+                    return false;
+                }
+                cfg.set(path, n);
+                // 总人数未显式够用时提示
+                int max = cfg.getInt("queue.max-players", n * 2);
+                if (max < n * 2) {
+                    sender.sendMessage("§e提示: max-players=" + max + " < team-size×2="
+                            + (n * 2) + "，建议同步调高");
+                }
+            }
+            case "max-players", "maxplayers", "max-player" -> {
+                if (n < 2 || n > 64) {
+                    sender.sendMessage("§cmax-players 范围 2–64");
+                    return false;
+                }
+                cfg.set(path, n);
+            }
+            case "half-round", "halfround", "half" -> {
+                if (n < 1 || n > 30) {
+                    sender.sendMessage("§chalf-round 范围 1–30");
+                    return false;
+                }
+                cfg.set(path, n);
+            }
+            case "win-target", "wintarget", "win" -> {
+                if (n < 1 || n > 30) {
+                    sender.sendMessage("§cwin-target 范围 1–30");
+                    return false;
+                }
+                cfg.set(path, n);
+            }
+            case "max-rounds", "maxrounds", "rounds" -> {
+                if (n < 1 || n > 60) {
+                    sender.sendMessage("§cmax-rounds 范围 1–60");
+                    return false;
+                }
+                cfg.set(path, n);
+            }
+            default -> {
+                sender.sendMessage("§c未知键");
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Boolean parseBoolean(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        return switch (raw.trim().toLowerCase(Locale.ROOT)) {
+            case "true", "yes", "on", "1", "y" -> true;
+            case "false", "no", "off", "0", "n" -> false;
+            default -> null;
+        };
+    }
+
     private void give(CommandSender sender, String[] args) {
         if (!(sender instanceof Player p)) {
             return;
@@ -308,7 +475,7 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             Stream<String> stream = ROOT.stream();
             if (!sender.hasPermission("deltaforcestrike.admin")) {
                 stream = stream.filter(s -> !List.of(
-                        "start", "stop", "reload", "give", "setspawn", "setsite"
+                        "start", "stop", "reload", "config", "give", "setspawn", "setsite"
                 ).contains(s));
             }
             return filter(stream.collect(Collectors.toList()), args[0]);
@@ -321,9 +488,18 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
                 ), args[1]);
                 case "setspawn" -> filter(List.of("queue", "t", "ct"), args[1]);
                 case "setsite" -> filter(List.of("a", "b"), args[1]);
+                case "config", "cfg", "set" -> filter(CONFIG_KEYS, args[1]);
                 case "give" -> filter(new ArrayList<>(plugin.getItemManager().getAll().keySet()), args[1]);
                 default -> List.of();
             };
+        }
+        if (args.length == 3
+                && List.of("config", "cfg", "set").contains(args[0].toLowerCase(Locale.ROOT))) {
+            String k = args[1].toLowerCase(Locale.ROOT).replace('_', '-');
+            if (k.contains("cancel")) {
+                return filter(List.of("true", "false"), args[2]);
+            }
+            return filter(List.of("1", "2", "3", "4", "5", "6", "8", "10", "12", "16"), args[2]);
         }
         return List.of();
     }

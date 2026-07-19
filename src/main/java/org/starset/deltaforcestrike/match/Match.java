@@ -74,13 +74,26 @@ public class Match {
         for (Player p : onlinePlayers()) p.sendMessage(component);
     }
 
+    /**
+     * 全灭判定：断线玩家仍计入该队，且视为已阵亡（不能阻止回合结束）。
+     */
     public boolean allDead(Team team) {
         boolean any = false;
         for (PlayerSession s : sessions.values()) {
-            if (s.getTeam() != team || !s.isConnected()) continue;
+            if (s.getTeam() != team) {
+                continue;
+            }
             any = true;
-            if (s.isAlive()) return false;
+            // 仅在线且存活才算“还活着”
+            if (s.isConnected() && s.isAlive()) {
+                return false;
+            }
         }
         return any;
+    }
+
+    /** 仍在对局中的在线人数（不含断线占位） */
+    public int onlineCount() {
+        return onlinePlayers().size();
     }
 }

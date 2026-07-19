@@ -97,9 +97,8 @@ public class MatchManager {
         }
 
         if (match != null && match.contains(player.getUniqueId())) {
-            safeScoreboardCreate(player);
-            safeTabUpdate(player);
-            safeScoreboardUpdateAll();
+            // 已在对局 session 中（含断线占位）→ 重连归队，不新建 session
+            handleReconnect(player);
             return true;
         }
 
@@ -160,6 +159,9 @@ public class MatchManager {
         return true;
     }
 
+    /**
+     * 主动离开（/dfs leave、离开竞技世界）：从对局移除。
+     */
     public void leave(Player player) {
         if (player == null || match == null || !match.contains(player.getUniqueId())) {
             return;
@@ -180,7 +182,9 @@ public class MatchManager {
         safeScoreboardRemove(player);
         safeTabReset(player);
         safeSpectatorClear(player);
-        player.setInvulnerable(false);
+        if (player.isOnline()) {
+            player.setInvulnerable(false);
+        }
 
         match.broadcast("§e[DFS] §f" + player.getName() + " §7已离开。 §8(" + match.size() + ")");
 
@@ -191,7 +195,7 @@ public class MatchManager {
             }
         } else if (state == MatchState.IN_PROGRESS) {
             match.getRoundManager().checkWipe();
-            if (match.size() == 0) {
+            if (match.size() == 0 || match.onlineCount() == 0) {
                 forceEnd("所有玩家已离开。");
             }
         } else if (state == MatchState.AGENT_SELECT && match.size() == 0) {
@@ -201,6 +205,159 @@ public class MatchManager {
         safeScoreboardUpdateAll();
         safeTabUpdateAll();
         sendQueueActionBar();
+    }
+
+    /**
+     * 断线：对局进行中保留 session（不踢出对局）；
+     * 战斗/拆弹阶段立即判死；购买/结算阶段保留存活，重连可归队。
+     * 队列阶段仍完整 leave。
+     */
+    public void handleDisconnect(Player player) {
+        if (player == null || match == null || !match.contains(player.getUniqueId())) {
+            return;
+        }
+
+        MatchState state = match.getState();
+        if (state != MatchState.IN_PROGRESS) {
+            leave(player);
+            return;
+        }
+
+        PlayerSession session = match.getSession(player.getUniqueId());
+        if (session == null) {
+            return;
+        }
+
+        session.setConnected(false);
+        RoundState rs = match.getRoundManager().getState();
+
+        if (rs == RoundState.COMBAT || rs == RoundState.BOMB_PLANTED) {
+            if (session.isAlive()) {
+                try {
+                    DeathDrops.dropAndClearLoadout(player);
+                } catch (Throwable ignored) {
+                }
+                if (session.markDeathCounted()) {
+                    session.addDeath();
+                }
+                session.setAlive(false);
+                match.broadcast("§e[DFS] §f" + player.getName()
+                        + " §7断线，本回合视为阵亡。 §8(仍在对局中)");
+            } else {
+                match.broadcast("§e[DFS] §f" + player.getName()
+                        + " §7断线（已阵亡）。 §8(仍在对局中)");
+            }
+        } else if (rs == RoundState.BUY || rs == RoundState.ROUND_END) {
+            // 购买/结算：不断线判死，重连可回场
+            match.broadcast("§e[DFS] §f" + player.getName()
+                    + " §7断线 · 购买阶段可重连归队。");
+        } else {
+            match.broadcast("§e[DFS] §f" + player.getName() + " §7断线。");
+        }
+
+        safeScoreboardRemove(player);
+        safeTabReset(player);
+        safeSpectatorClear(player);
+
+        match.getRoundManager().checkWipe();
+        if (match.onlineCount() == 0) {
+            forceEnd("所有玩家已断线。");
+            return;
+        }
+
+        safeScoreboardUpdateAll();
+        safeTabUpdateAll();
+    }
+
+    /**
+     * 重连归队：session 仍在对局中。
+     * 购买阶段 → 恢复存活；战斗阶段 → 旁观（断线已判死，或购买中断线后进战斗亦判死）。
+     */
+    public void handleReconnect(Player player) {
+        if (player == null || match == null || !match.contains(player.getUniqueId())) {
+            return;
+        }
+
+        PlayerSession session = match.getSession(player.getUniqueId());
+        if (session == null) {
+            return;
+        }
+
+        session.setConnected(true);
+        MatchState state = match.getState();
+
+        player.setInvulnerable(false);
+        player.setFallDistance(0f);
+        safeScoreboardCreate(player);
+        safeTabUpdate(player);
+
+        if (state != MatchState.IN_PROGRESS) {
+            player.setGameMode(GameMode.ADVENTURE);
+            teleportQueue(player);
+            plugin.getGameRulesService().fillHealth(player);
+            plugin.getGameRulesService().fillFood(player);
+            player.sendMessage("§a[DFS] 已重连队列。");
+            safeScoreboardUpdateAll();
+            safeTabUpdateAll();
+            return;
+        }
+
+        RoundState rs = match.getRoundManager().getState();
+
+        if (rs == RoundState.BUY || rs == RoundState.ROUND_END) {
+            // 购买阶段重连：不判死，回出生点
+            session.setAlive(true);
+            session.resetDeathCounted();
+            try {
+                if (plugin.getSpectatorLockService() != null) {
+                    plugin.getSpectatorLockService().clear(player);
+                }
+                player.setSpectatorTarget(null);
+            } catch (Throwable ignored) {
+            }
+            player.setGameMode(GameMode.ADVENTURE);
+            player.setFlying(false);
+            player.setAllowFlight(false);
+            plugin.getGameRulesService().fillHealth(player);
+            plugin.getGameRulesService().fillFood(player);
+            if (session.hasTeam()) {
+                teleportTeamSpawn(player, session.getTeam());
+            } else {
+                teleportQueue(player);
+            }
+            player.sendMessage("§a[DFS] 已重连 · 购买阶段，已归队。§7 /dfs shop");
+            match.broadcast("§a[DFS] §f" + player.getName() + " §7重连归队（购买阶段）。");
+        } else {
+            // 战斗 / 拆弹：必须旁观
+            if (session.isAlive()) {
+                // 购买阶段断线、战斗开始后才重连 → 本回合判死
+                if (session.markDeathCounted()) {
+                    session.addDeath();
+                }
+                session.setAlive(false);
+                player.sendMessage("§c[DFS] 已重连 · 战斗已开始，本回合视为阵亡，进入观战。");
+                match.broadcast("§e[DFS] §f" + player.getName()
+                        + " §7重连过晚，本回合阵亡观战。");
+            } else {
+                player.sendMessage("§c[DFS] 已重连 · 本回合已阵亡，进入观战。");
+                match.broadcast("§a[DFS] §f" + player.getName() + " §7重连观战。");
+            }
+            player.setGameMode(GameMode.SPECTATOR);
+            plugin.getGameRulesService().fillFood(player);
+            if (plugin.getSpectatorLockService() != null) {
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (player.isOnline() && match != null
+                            && match.contains(player.getUniqueId())
+                            && !session.isAlive()) {
+                        plugin.getSpectatorLockService().onEnterSpectator(player);
+                    }
+                });
+            }
+            match.getRoundManager().checkWipe();
+        }
+
+        safeScoreboardUpdateAll();
+        safeTabUpdateAll();
     }
 
     private void checkAutoStart() {

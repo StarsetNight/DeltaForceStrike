@@ -8,7 +8,7 @@ description: 友谊之约：反制行动 - 3v3 回合制战术竞技
 commands:
   dfs:
     description: DeltaForceStrike 主命令
-    usage: /dfs <join|leave|shop|agent|info|reload>
+    usage: /dfs <join|leave|shop|agent|info|reload|config>
     aliases: [delta, fp]
     permission: deltaforcestrike.use
 

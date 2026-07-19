@@ -41,8 +41,9 @@ public class ArenaPlayerListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
+        // 对局中断线：保留 session；战斗阶段判死；购买阶段可重连归队
         if (plugin.getMatchManager().isInMatch(event.getPlayer())) {
-            plugin.getMatchManager().leave(event.getPlayer());
+            plugin.getMatchManager().handleDisconnect(event.getPlayer());
         }
     }
 }

@@ -78,9 +78,9 @@ public class RoundManager {
 
         match.setCurrentRound(match.getCurrentRound() + 1);
         for (PlayerSession s : match.getSessions().values()) {
-            if (s.isConnected()) {
-                s.setAlive(true);
-            }
+            // 新回合：在线与断线占位均重置存活，断线者重连后可回购买阶段
+            s.setAlive(true);
+            s.resetDeathCounted();
         }
         startBuyPhase();
     }
@@ -138,7 +138,9 @@ public class RoundManager {
             }
 
             s.setAlive(true);
-            s.setConnected(true);
+            if (p.isOnline()) {
+                s.setConnected(true);
+            }
             forceExitSpectator(p);
 
             p.setInvulnerable(false);
@@ -361,6 +363,15 @@ public class RoundManager {
 
     private void startCombatPhase() {
         cancel();
+        // 购买阶段仍断线的玩家：本回合视为阵亡（不占“存活”坑）
+        for (PlayerSession s : match.getSessions().values()) {
+            if (!s.isConnected() && s.isAlive()) {
+                if (s.markDeathCounted()) {
+                    s.addDeath();
+                }
+                s.setAlive(false);
+            }
+        }
         for (Player p : match.onlinePlayers()) {
             p.closeInventory();
             PlayerSession s = match.getSession(p.getUniqueId());
@@ -372,6 +383,7 @@ public class RoundManager {
         secondsLeft = plugin.getConfig().getInt("round.combat-time", 100);
         broadcastLegacy("§c§l[DFS] 战斗开始！");
         refreshUi();
+        checkWipe();
 
         task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (state != RoundState.COMBAT) {
