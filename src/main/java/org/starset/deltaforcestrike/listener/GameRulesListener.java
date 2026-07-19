@@ -7,7 +7,6 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
-import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -346,13 +345,13 @@ public class GameRulesListener implements Listener {
                 if (src instanceof Player p) {
                     info.killerName = p.getName();
                     ItemStack hand = p.getInventory().getItemInMainHand();
-                    info.weaponName = (hand == null || hand.getType().isAir())
+                    info.weaponName = hand.getType().isAir()
                             ? proj.getType().name().toLowerCase().replace('_', ' ')
                             : weaponDisplay(hand);
                 } else if (src instanceof Entity e) {
                     info.killerName = e.getName();
                 }
-            } else if (damager != null) {
+            } else {
                 info.killerName = damager.getName();
             }
         }
@@ -377,7 +376,7 @@ public class GameRulesListener implements Listener {
                 Component display = meta.displayName();
                 if (display != null) {
                     String plain = PlainTextComponentSerializer.plainText().serialize(display);
-                    if (plain != null && !plain.isEmpty()) {
+                    if (!plain.isEmpty()) {
                         return plain;
                     }
                 }

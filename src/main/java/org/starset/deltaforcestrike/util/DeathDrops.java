@@ -44,7 +44,7 @@ public final class DeathDrops {
         }
 
         ItemStack off = inv.getItemInOffHand();
-        if (off != null && !off.getType().isAir()) {
+        if (!off.getType().isAir()) {
             if (shouldNotDrop(items, off)) {
                 inv.setItemInOffHand(null);
             } else {

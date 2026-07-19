@@ -12,7 +12,9 @@ import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
+import org.starset.deltaforcestrike.operator.OperatorDefinition;
 import org.starset.deltaforcestrike.shop.ShopGUI;
+import org.starset.deltaforcestrike.util.GameGuide;
 import org.starset.deltaforcestrike.util.Worlds;
 
 import java.util.ArrayList;
@@ -26,7 +28,7 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
     private final DeltaForceStrike plugin;
 
     private static final List<String> ROOT = List.of(
-            "join", "leave", "team", "agent", "info", "shop",
+            "join", "leave", "team", "agent", "info", "shop", "guide",
             "start", "stop", "give", "reload", "setspawn", "setsite", "help"
     );
 
@@ -50,6 +52,7 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             case "agent" -> agent(sender, args);
             case "info" -> info(sender);
             case "shop" -> shop(sender);
+            case "guide" -> guide(sender);
             case "start" -> start(sender);
             case "stop" -> stop(sender);
             case "reload" -> reload(sender);
@@ -57,7 +60,6 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             case "setspawn" -> setSpawn(sender, args);
             case "setsite" -> setSite(sender, args);
             case "help" -> help(sender);
-            case "guide" -> guide(sender);
             default -> sender.sendMessage("§c未知子命令。§7 /dfs help");
         }
         return true;
@@ -65,18 +67,10 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
 
     private void help(CommandSender sender) {
         sender.sendMessage("§6§l--- DeltaForceStrike ---");
-        sender.sendMessage("§e/dfs guide|join|leave|team|shop|info");
+        sender.sendMessage("§e/dfs join|leave|team|shop|guide|info|agent");
         if (sender.hasPermission("deltaforcestrike.admin")) {
             sender.sendMessage("§c/dfs start|stop|reload|give|setspawn|setsite");
         }
-    }
-
-    private void guide(CommandSender sender) {
-        if (!(sender instanceof Player p)) {
-            sender.sendMessage("§c仅玩家可用");
-            return;
-        }
-        org.starset.deltaforcestrike.util.GameGuide.send(p);
     }
 
     private void join(CommandSender sender) {
@@ -88,7 +82,9 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
     }
 
     private void leave(CommandSender sender) {
-        if (!(sender instanceof Player p)) return;
+        if (!(sender instanceof Player p)) {
+            return;
+        }
         if (!plugin.getMatchManager().isInMatch(p)) {
             p.sendMessage("§7不在队列中");
             return;
@@ -98,7 +94,9 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
     }
 
     private void team(CommandSender sender, String[] args) {
-        if (!(sender instanceof Player p)) return;
+        if (!(sender instanceof Player p)) {
+            return;
+        }
         if (args.length < 2) {
             p.sendMessage("§c/dfs team <t|ct>");
             return;
@@ -112,9 +110,18 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
     }
 
     private void agent(CommandSender sender, String[] args) {
-        if (!(sender instanceof Player p)) return;
+        if (!(sender instanceof Player p)) {
+            return;
+        }
         if (args.length < 2) {
-            p.sendMessage("§c/dfs agent <id>");
+            p.sendMessage("§c/dfs agent <niko|bruo|aier|wulong|妮可|布若|艾尔|骛龙>");
+            if (plugin.getOperatorService() != null) {
+                StringBuilder sb = new StringBuilder("§7可用: ");
+                for (OperatorDefinition d : plugin.getOperatorService().getRegistry().allUnique()) {
+                    sb.append(d.getId()).append("(").append(d.getDisplayName()).append(") ");
+                }
+                p.sendMessage(sb.toString());
+            }
             return;
         }
         plugin.getMatchManager().trySelectOperator(p, args[1]);
@@ -136,6 +143,14 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         ShopGUI.open(p);
     }
 
+    private void guide(CommandSender sender) {
+        if (!(sender instanceof Player p)) {
+            sender.sendMessage("§c仅玩家");
+            return;
+        }
+        GameGuide.send(p);
+    }
+
     private void info(CommandSender sender) {
         sender.sendMessage("§6=== DFS ===");
         sender.sendMessage("§7" + plugin.getMatchManager().statusLine());
@@ -143,34 +158,53 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             Match m = plugin.getMatchManager().getMatch();
             PlayerSession s = m == null ? null : m.getSession(p.getUniqueId());
             if (s != null) {
-                sender.sendMessage("§7队伍:" + s.getTeam() + " 资金:$" + s.getMoney()
-                        + " K/D:" + s.getKills() + "/" + s.getDeaths());
+                sender.sendMessage("§7队伍:" + s.getTeam()
+                        + " 资金:$" + s.getMoney()
+                        + " K/D:" + s.getKills() + "/" + s.getDeaths()
+                        + " 干员:" + (s.getOperatorId() == null ? "无" : s.getOperatorId()));
             }
         }
     }
 
     private void start(CommandSender sender) {
-        if (!admin(sender)) return;
+        if (!admin(sender)) {
+            return;
+        }
         plugin.getMatchManager().forceStartCountdown();
         sender.sendMessage("§a已开始倒计时");
     }
 
     private void stop(CommandSender sender) {
-        if (!admin(sender)) return;
+        if (!admin(sender)) {
+            return;
+        }
         plugin.getMatchManager().forceEnd("管理员终止");
     }
 
     private void reload(CommandSender sender) {
-        if (!admin(sender)) return;
+        if (!admin(sender)) {
+            return;
+        }
         plugin.reloadConfig();
         plugin.getItemManager().reload();
         plugin.getGameRulesService().applyToArenaWorld();
-        sender.sendMessage("§a已重载");
+        if (plugin.getOperatorService() != null) {
+            plugin.getOperatorService().reload();
+        }
+        sender.sendMessage("§a已重载配置/物品/干员。物品:"
+                + plugin.getItemManager().getAll().size()
+                + " 干员:"
+                + (plugin.getOperatorService() == null ? 0
+                : plugin.getOperatorService().getRegistry().allUnique().size()));
     }
 
     private void give(CommandSender sender, String[] args) {
-        if (!(sender instanceof Player p)) return;
-        if (!admin(sender)) return;
+        if (!(sender instanceof Player p)) {
+            return;
+        }
+        if (!admin(sender)) {
+            return;
+        }
         if (args.length < 2) {
             p.sendMessage("§c/dfs give <itemId>");
             return;
@@ -180,8 +214,12 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
     }
 
     private void setSpawn(CommandSender sender, String[] args) {
-        if (!(sender instanceof Player p)) return;
-        if (!admin(sender)) return;
+        if (!(sender instanceof Player p)) {
+            return;
+        }
+        if (!admin(sender)) {
+            return;
+        }
         if (args.length < 2) {
             p.sendMessage("§c/dfs setspawn <queue|t|ct>");
             return;
@@ -200,8 +238,12 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
     }
 
     private void setSite(CommandSender sender, String[] args) {
-        if (!(sender instanceof Player p)) return;
-        if (!admin(sender)) return;
+        if (!(sender instanceof Player p)) {
+            return;
+        }
+        if (!admin(sender)) {
+            return;
+        }
         if (args.length < 2) {
             p.sendMessage("§c/dfs setsite <a|b|名称> [radius]");
             return;
@@ -242,7 +284,9 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean admin(CommandSender sender) {
-        if (sender.hasPermission("deltaforcestrike.admin")) return true;
+        if (sender.hasPermission("deltaforcestrike.admin")) {
+            return true;
+        }
         sender.sendMessage("§c无权限");
         return false;
     }
@@ -272,6 +316,9 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         if (args.length == 2) {
             return switch (args[0].toLowerCase(Locale.ROOT)) {
                 case "team" -> filter(List.of("t", "ct"), args[1]);
+                case "agent" -> filter(List.of(
+                        "niko", "bruo", "aier", "wulong", "妮可", "布若", "艾尔", "骛龙"
+                ), args[1]);
                 case "setspawn" -> filter(List.of("queue", "t", "ct"), args[1]);
                 case "setsite" -> filter(List.of("a", "b"), args[1]);
                 case "give" -> filter(new ArrayList<>(plugin.getItemManager().getAll().keySet()), args[1]);
@@ -283,6 +330,8 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
 
     private List<String> filter(List<String> src, String prefix) {
         String p = prefix.toLowerCase(Locale.ROOT);
-        return src.stream().filter(s -> s.toLowerCase(Locale.ROOT).startsWith(p)).collect(Collectors.toList());
+        return src.stream()
+                .filter(s -> s.toLowerCase(Locale.ROOT).startsWith(p))
+                .collect(Collectors.toList());
     }
 }

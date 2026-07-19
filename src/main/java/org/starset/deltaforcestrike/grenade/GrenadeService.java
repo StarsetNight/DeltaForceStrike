@@ -97,6 +97,12 @@ public class GrenadeService {
                 ? player.getInventory().getItemInOffHand()
                 : player.getInventory().getItemInMainHand();
 
+        // 干员技能（如艾尔强效烟幕 aier_smoke）禁止走战术道具路径
+        var ops = plugin.getOperatorService();
+        if (ops != null && ops.isSkillStack(stack)) {
+            return false;
+        }
+
         ItemManager items = plugin.getItemManager();
         GrenadeType type = GrenadeType.fromItem(items, stack);
         if (type == null) {
@@ -154,11 +160,12 @@ public class GrenadeService {
         if (ball == null) {
             return false;
         }
+        // 仅 GrenadeKeys；技能投掷物（op_skill_projectile）不算战术道具
         return ball.getPersistentDataContainer().has(GrenadeKeys.type(), PersistentDataType.STRING);
     }
 
     public GrenadeType getType(Snowball ball) {
-        if (ball == null) {
+        if (ball == null || !isGrenade(ball)) {
             return null;
         }
         String raw = ball.getPersistentDataContainer().get(GrenadeKeys.type(), PersistentDataType.STRING);

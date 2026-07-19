@@ -1,6 +1,5 @@
 package org.starset.deltaforcestrike.listener;
 
-import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -30,10 +29,12 @@ public class BuyZoneListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
-        if (event.getTo() == null) return;
-        if (event.getFrom().getBlockX() == event.getTo().getBlockX()
-                && event.getFrom().getBlockY() == event.getTo().getBlockY()
-                && event.getFrom().getBlockZ() == event.getTo().getBlockZ()) {
+        Location to = event.getTo();
+        Location from = event.getFrom();
+        // Paper: getTo() 在移动事件中非 null；仍用局部变量避免重复调用
+        if (from.getBlockX() == to.getBlockX()
+                && from.getBlockY() == to.getBlockY()
+                && from.getBlockZ() == to.getBlockZ()) {
             return;
         }
 
@@ -51,7 +52,6 @@ public class BuyZoneListener implements Listener {
         if (center == null || center.getWorld() == null) return;
         if (!player.getWorld().equals(center.getWorld())) return;
 
-        Location to = event.getTo();
         double dx = to.getX() - center.getX();
         double dz = to.getZ() - center.getZ();
         double distSq = dx * dx + dz * dz;
@@ -59,6 +59,9 @@ public class BuyZoneListener implements Listener {
         if (distSq <= r * r) return;
 
         double dist = Math.sqrt(distSq);
+        if (dist < 1e-6) {
+            return;
+        }
         double nx = center.getX() + dx / dist * (r - 0.25);
         double nz = center.getZ() + dz / dist * (r - 0.25);
         event.setTo(new Location(to.getWorld(), nx, to.getY(), nz, to.getYaw(), to.getPitch()));

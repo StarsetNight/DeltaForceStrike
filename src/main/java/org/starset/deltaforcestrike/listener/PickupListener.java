@@ -17,6 +17,8 @@ import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
+import org.starset.deltaforcestrike.operator.OperatorService;
+import org.starset.deltaforcestrike.operator.SkillKind;
 import org.starset.deltaforcestrike.util.ConfigKeys;
 import org.starset.deltaforcestrike.util.InventorySlots;
 import org.starset.deltaforcestrike.util.ItemPlacement;
@@ -55,10 +57,11 @@ public class PickupListener implements Listener {
         }
 
         ItemManager items = plugin.getItemManager();
+        OperatorService ops = plugin.getOperatorService();
         Item entity = event.getItem();
         ItemStack stack = entity.getItemStack();
 
-        // 箭 → 主背包 9–35
+        // 箭 → 主背包
         if (stack.getType() == Material.ARROW
                 || stack.getType() == Material.SPECTRAL_ARROW
                 || stack.getType() == Material.TIPPED_ARROW) {
@@ -67,6 +70,34 @@ public class PickupListener implements Listener {
             if (moved > 0) {
                 shrinkGround(entity, stack, moved);
             }
+            return;
+        }
+
+        // 技能物品 → 按 kind 回 7/8/9
+        if (ops != null && ops.isSkillStack(stack)) {
+            event.setCancelled(true);
+            SkillKind kind = ops.getSkillKind(stack);
+            if (kind == null) {
+                return;
+            }
+            int slot = switch (kind) {
+                case SIGNATURE -> InventorySlots.SIGNATURE;
+                case PURCHASABLE -> InventorySlots.PURCHASABLE;
+                case ULTIMATE -> InventorySlots.ULTIMATE;
+                default -> -1;
+            };
+            if (slot < 0) {
+                return;
+            }
+            ItemStack cur = player.getInventory().getItem(slot);
+            if (cur != null && !cur.getType().isAir()) {
+                // 槽已有技能：不捡
+                return;
+            }
+            ItemStack one = stack.clone();
+            one.setAmount(1);
+            player.getInventory().setItem(slot, one);
+            shrinkGround(entity, stack, 1);
             return;
         }
 
@@ -91,7 +122,6 @@ public class PickupListener implements Listener {
         String type = items.getItemType(stack);
         String action = getAction(stack);
 
-        // 改造 TNT → 仅 T，槽 2
         if (isBomb(items, stack, id, type, action)) {
             event.setCancelled(true);
             Match match = plugin.getMatchManager().getMatch();
@@ -111,12 +141,16 @@ public class PickupListener implements Listener {
             return;
         }
 
-        // 拆除钳 → 槽 2（与 C4 同槽；一般仅 CT 使用，拾取不限阵营，sanitize 可清 T 的钳）
         if (isDefuseKit(items, stack, id, type, action)) {
             event.setCancelled(true);
+            Match match = plugin.getMatchManager().getMatch();
+            PlayerSession session = match == null ? null : match.getSession(player.getUniqueId());
+            if (session == null || session.getTeam() != Team.CT) {
+                return;
+            }
             PlayerInventory inv = player.getInventory();
             if (!isEmpty(inv.getItem(InventorySlots.BOMB))) {
-                return; // 槽 2 已有物品（包或钳）
+                return;
             }
             ItemStack one = stack.clone();
             one.setAmount(1);
@@ -152,32 +186,23 @@ public class PickupListener implements Listener {
         if (stack == null || stack.getType().isAir()) {
             return false;
         }
-        if ("plant".equalsIgnoreCase(action)) {
+        if ("defuse".equalsIgnoreCase(action) || "defuse".equalsIgnoreCase(type)) {
+            return false;
+        }
+        if ("plant".equalsIgnoreCase(action) || "bomb".equalsIgnoreCase(type)) {
             return true;
         }
-        if ("bomb".equalsIgnoreCase(type)) {
-            return true;
-        }
-        if (id != null && id.contains("plant-bomb")) {
-            return true;
-        }
-        return stack.getType() == Material.TNT && id != null && !isDefuseKit(items, stack, id, type, action);
+        return id != null && id.contains("plant-bomb");
     }
 
     private boolean isDefuseKit(ItemManager items, ItemStack stack, String id, String type, String action) {
         if (stack == null) {
             return false;
         }
-        if ("defuse".equalsIgnoreCase(action)) {
+        if ("defuse".equalsIgnoreCase(action) || "defuse".equalsIgnoreCase(type)) {
             return true;
         }
-        if ("defuse".equalsIgnoreCase(type)) {
-            return true;
-        }
-        if (id != null && id.toLowerCase(Locale.ROOT).contains("defuse")) {
-            return true;
-        }
-        return false;
+        return id != null && id.toLowerCase(Locale.ROOT).contains("defuse");
     }
 
     private int putArrowsInStorage(Player player, ItemStack source) {
@@ -207,7 +232,6 @@ public class PickupListener implements Listener {
             remain -= add;
             moved += add;
         }
-
         for (int i = 9; i <= 35 && remain > 0; i++) {
             ItemStack cur = inv.getItem(i);
             if (cur != null && !cur.getType().isAir()) {
@@ -244,11 +268,10 @@ public class PickupListener implements Listener {
             }
         }
 
-        // 拆除钳 / 包 → 槽 2
-        if (isDefuseKit(items, stack, id, type, action)
-                || isBomb(items, stack, id, type, action)
+        PlayerInventory inv = player.getInventory();
+
+        if (isDefuseKit(items, stack, id, type, action) || isBomb(items, stack, id, type, action)
                 || "bomb".equalsIgnoreCase(slotHint)) {
-            PlayerInventory inv = player.getInventory();
             if (!isEmpty(inv.getItem(InventorySlots.BOMB))) {
                 return false;
             }
@@ -256,9 +279,7 @@ public class PickupListener implements Listener {
             return true;
         }
 
-        PlayerInventory inv = player.getInventory();
         int preferred = InventorySlots.preferredHotbarSlot(type, slotHint);
-
         if (preferred == InventorySlots.UTIL_1
                 || "utility".equalsIgnoreCase(type)
                 || "utility".equalsIgnoreCase(slotHint)) {
@@ -268,7 +289,7 @@ public class PickupListener implements Listener {
             }
             return ItemPlacement.putInSlot(inv, empty, stack, items, false);
         }
-        if (preferred >= 0 && preferred <= 8) {
+        if (preferred >= 0 && preferred <= 5) {
             return ItemPlacement.putInSlot(inv, preferred, stack, items, false);
         }
         return false;

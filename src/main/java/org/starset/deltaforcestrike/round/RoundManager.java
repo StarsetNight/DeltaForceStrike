@@ -31,10 +31,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * 回合状态机：BUY → COMBAT → BOMB_PLANTED → ROUND_END
- * ActionBar/Title 均不触发 Adventure LegacyFormattingDetected。
- */
 public class RoundManager {
 
     private static final LegacyComponentSerializer LEGACY =
@@ -59,10 +55,6 @@ public class RoundManager {
     public int getSecondsLeft() {
         return secondsLeft;
     }
-
-    // =====================================================================
-    // 回合推进
-    // =====================================================================
 
     public void startNextRound() {
         int winTarget = plugin.getConfig().getInt("match.win-target", 5);
@@ -125,10 +117,6 @@ public class RoundManager {
         refreshUi();
     }
 
-    // =====================================================================
-    // 购买阶段
-    // =====================================================================
-
     private void startBuyPhase() {
         cancel();
         plugin.getBombManager().reset();
@@ -165,9 +153,15 @@ public class RoundManager {
         }
 
         assignBombCarrier(give, items);
+
+        // ★ 最后发技能：7 招牌 / 8 购买(空) / 9 大招
+        if (plugin.getOperatorService() != null
+                && plugin.getConfig().getBoolean("operator.enabled", true)) {
+            plugin.getOperatorService().onRoundStart(match);
+        }
+
         refreshUi();
 
-        // 防旁观锁抢回
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (state != RoundState.BUY) {
                 return;
@@ -179,10 +173,16 @@ public class RoundManager {
                 }
                 s.setAlive(true);
                 forceExitSpectator(p);
+                // 再刷一次技能栏，防止其它逻辑覆盖
+                if (plugin.getOperatorService() != null) {
+                    var load = plugin.getOperatorService().getLoadout(p.getUniqueId());
+                    if (load != null) {
+                        plugin.getOperatorService().giveSkillHotbarItems(p, load);
+                    }
+                }
             }
         });
 
-        // 自动商店
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (state != RoundState.BUY) {
                 return;
@@ -201,7 +201,6 @@ public class RoundManager {
                 cancel();
                 return;
             }
-
             for (Player p : match.onlinePlayers()) {
                 PlayerSession s = match.getSession(p.getUniqueId());
                 if (s != null && s.hasTeam() && s.isAlive()
@@ -209,10 +208,7 @@ public class RoundManager {
                     forceExitSpectator(p);
                 }
             }
-
-            // ActionBar：禁止 Component.text("§...")
             actionBarLegacy("§e购买阶段 §f" + secondsLeft + "s §7| §a/dfs shop");
-
             if (secondsLeft <= 0) {
                 startCombatPhase();
                 return;
@@ -263,18 +259,16 @@ public class RoundManager {
             give.give(p, "standard", true);
         }
 
+        ItemStack off = inv.getItemInOffHand();
+        boolean offEmpty = off.getType().isAir() || off.getAmount() <= 0;
         if (ConfigKeys.shieldEnabled()) {
-            ItemStack off = inv.getItemInOffHand();
-            if (off == null || off.getType().isAir() || !items.isShield(off)) {
+            if (offEmpty || !items.isShield(off)) {
                 if (!give.give(p, "shield", true)) {
                     give.give(p, "equipments.shield", true);
                 }
             }
-        } else {
-            ItemStack off = inv.getItemInOffHand();
-            if (off != null && (items.isShield(off) || off.getType() == Material.SHIELD)) {
-                inv.setItemInOffHand(null);
-            }
+        } else if (!offEmpty && (items.isShield(off) || off.getType() == Material.SHIELD)) {
+            inv.setItemInOffHand(null);
         }
 
         if (give.hasRangedWeapon(p)) {
@@ -307,16 +301,13 @@ public class RoundManager {
             }
             tPlayers.add(p);
         }
-
         if (tPlayers.isEmpty()) {
             broadcastLegacy("§c[DFS] 进攻方无人，未分配改造TNT。");
             return;
         }
-
         for (Player p : tPlayers) {
             clearPlantBombOnly(p, items);
         }
-
         Collections.shuffle(tPlayers);
         Player carrier = tPlayers.get(0);
 
@@ -329,7 +320,6 @@ public class RoundManager {
         if (!ok) {
             ok = give.give(carrier, "bomb.plant-bomb", true);
         }
-
         if (ok) {
             carrier.sendMessage("§c§l[DFS] 你携带改造TNT！§7请安装到包点。（热键第3格）");
             for (Player p : tPlayers) {
@@ -350,8 +340,7 @@ public class RoundManager {
         if (stack.hasItemMeta()) {
             action = stack.getItemMeta().getPersistentDataContainer().get(
                     org.starset.deltaforcestrike.item.ItemKeys.action(),
-                    org.bukkit.persistence.PersistentDataType.STRING
-            );
+                    org.bukkit.persistence.PersistentDataType.STRING);
         }
         if ("defuse".equalsIgnoreCase(action)) {
             return false;
@@ -370,10 +359,6 @@ public class RoundManager {
         return id != null && id.contains("plant-bomb");
     }
 
-    // =====================================================================
-    // 战斗 / 拆弹
-    // =====================================================================
-
     private void startCombatPhase() {
         cancel();
         for (Player p : match.onlinePlayers()) {
@@ -383,7 +368,6 @@ public class RoundManager {
                 forceExitSpectator(p);
             }
         }
-
         state = RoundState.COMBAT;
         secondsLeft = plugin.getConfig().getInt("round.combat-time", 100);
         broadcastLegacy("§c§l[DFS] 战斗开始！");
@@ -419,7 +403,6 @@ public class RoundManager {
             return;
         }
 
-        // 只同步 UI，不自行倒数爆炸
         task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (state != RoundState.BOMB_PLANTED) {
                 cancel();
@@ -447,10 +430,6 @@ public class RoundManager {
         }
     }
 
-    // =====================================================================
-    // 回合结束
-    // =====================================================================
-
     public void endRound(Team winner, String reason) {
         if (state == RoundState.ROUND_END || state == RoundState.IDLE) {
             return;
@@ -460,6 +439,10 @@ public class RoundManager {
 
         plugin.getBombManager().reset();
         ArenaCleanup.clearDrops();
+
+        if (plugin.getOperatorService() != null) {
+            plugin.getOperatorService().onRoundEnd(match);
+        }
 
         match.addScore(winner);
         applyEconomy(winner);
@@ -478,18 +461,13 @@ public class RoundManager {
 
     private void showRoundResultTitles(Team winner, String reason) {
         Title.Times times = Title.Times.times(
-                Duration.ofMillis(150),
-                Duration.ofSeconds(3),
-                Duration.ofMillis(500)
-        );
-
+                Duration.ofMillis(150), Duration.ofSeconds(3), Duration.ofMillis(500));
         Component winMain = Component.text("回合胜利", NamedTextColor.GREEN, TextDecoration.BOLD);
         Component loseMain = Component.text("回合败北", NamedTextColor.RED, TextDecoration.BOLD);
         Component reasonComp = Component.text(reason == null ? "" : reason, NamedTextColor.GRAY);
         Component scoreComp = Component.text(
                 "比分 T " + match.getScoreT() + " - " + match.getScoreCT() + " CT",
-                NamedTextColor.YELLOW
-        );
+                NamedTextColor.YELLOW);
         Component subtitle = reasonComp
                 .append(Component.text(" · ", NamedTextColor.DARK_GRAY))
                 .append(scoreComp);
@@ -499,9 +477,7 @@ public class RoundManager {
             if (s == null || !s.hasTeam()) {
                 p.showTitle(Title.title(
                         Component.text("回合结束", NamedTextColor.GOLD, TextDecoration.BOLD),
-                        scoreComp,
-                        times
-                ));
+                        scoreComp, times));
                 continue;
             }
             if (s.getTeam() == winner) {
@@ -517,7 +493,7 @@ public class RoundManager {
     private void applyEconomy(Team winner) {
         int winMoney = plugin.getConfig().getInt("economy.victory-bonus", 3200);
         List<Integer> defeat = plugin.getConfig().getIntegerList("economy.defeat-bonus");
-        if (defeat == null || defeat.isEmpty()) {
+        if (defeat.isEmpty()) {
             defeat = List.of(1600, 2000, 2400);
         }
         int pistol = plugin.getConfig().getInt("economy.pistol-round-bonus", 2400);
@@ -548,28 +524,15 @@ public class RoundManager {
         ArenaCleanup.clearDrops();
         String msg;
         if (match.getScoreT() > match.getScoreCT()) {
-            msg = "§a进攻方 T 获胜！§c" + match.getScoreT() + "§7-§b" + match.getScoreCT();
+            msg = "进攻方 T 获胜！最终 " + match.getScoreT() + "-" + match.getScoreCT();
         } else if (match.getScoreCT() > match.getScoreT()) {
-            msg = "§a防守方 CT 获胜！§c" + match.getScoreT() + "§7-§b" + match.getScoreCT();
+            msg = "防守方 CT 获胜！最终 " + match.getScoreT() + "-" + match.getScoreCT();
         } else {
-            msg = "§e平局！§c" + match.getScoreT() + "§7-§b" + match.getScoreCT();
+            msg = "平局！最终 " + match.getScoreT() + "-" + match.getScoreCT();
         }
-        plugin.getMatchManager().forceEnd(stripForForceEnd(msg));
+        plugin.getMatchManager().forceEnd(msg);
     }
 
-    /** forceEnd 若内部再用 § 广播，保持字符串 API 即可 */
-    private String stripForForceEnd(String legacy) {
-        // MatchManager.forceEnd 使用 sendMessage(String)，可带 §
-        return legacy;
-    }
-
-    // =====================================================================
-    // 消息工具（避免 LegacyFormattingDetected）
-    // =====================================================================
-
-    /**
-     * ActionBar：§ 字符串必须 deserialize，禁止 Component.text("§...")
-     */
     private void actionBarLegacy(String legacyMsg) {
         Component c = LEGACY.deserialize(legacyMsg == null ? "" : legacyMsg);
         for (Player p : match.onlinePlayers()) {
@@ -577,9 +540,6 @@ public class RoundManager {
         }
     }
 
-    /**
-     * 聊天广播：Bukkit 字符串 API 支持 §，不会触发 Adventure 警告。
-     */
     private void broadcastLegacy(String legacyMsg) {
         if (legacyMsg == null) {
             return;

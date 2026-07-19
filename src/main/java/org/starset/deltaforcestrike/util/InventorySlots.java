@@ -1,18 +1,25 @@
 package org.starset.deltaforcestrike.util;
 
+/**
+ * 热键 0-8 对应玩家看到的 1-9 格。
+ * 第7格=招牌 第8格=购买技能 第9格=大招
+ */
 public final class InventorySlots {
 
     private InventorySlots() {}
 
     public static final int MELEE = 0;
     public static final int RANGED = 1;
-    /** 热键第 3 格：T=改造TNT / CT=拆除钳 */
+    /** 第 3 格：C4 / 拆除钳 */
     public static final int BOMB = 2;
     public static final int UTIL_1 = 3;
     public static final int UTIL_2 = 4;
     public static final int UTIL_3 = 5;
+    /** 第 7 格：招牌技能 */
     public static final int SIGNATURE = 6;
+    /** 第 8 格：购买技能 */
     public static final int PURCHASABLE = 7;
+    /** 第 9 格：终极技能 */
     public static final int ULTIMATE = 8;
 
     public static boolean isHotbar(int slot) {
@@ -39,8 +46,8 @@ public final class InventorySlots {
                 case "bomb", "defuse", "defuse-kit", "c4" -> BOMB;
                 case "utility" -> UTIL_1;
                 case "signature", "skill_signature" -> SIGNATURE;
-                case "purchasable", "skill_buy" -> PURCHASABLE;
-                case "ultimate", "skill_ult" -> ULTIMATE;
+                case "purchasable", "skill_buy", "skill_purchasable" -> PURCHASABLE;
+                case "ultimate", "skill_ult", "skill_ultimate" -> ULTIMATE;
                 case "shield", "offhand" -> -2;
                 case "armor" -> -3;
                 default -> preferredByType(type);
@@ -58,7 +65,9 @@ public final class InventorySlots {
             case "ranged" -> RANGED;
             case "bomb", "defuse" -> BOMB;
             case "utility", "grenade" -> UTIL_1;
-            case "skill", "skill_charge" -> PURCHASABLE;
+            // 技能充能不是热键道具
+            case "skill_charge", "skill-charge" -> -1;
+            case "skill", "signature" -> SIGNATURE;
             case "shield" -> -2;
             case "armor" -> -3;
             default -> -1;
@@ -74,7 +83,7 @@ public final class InventorySlots {
             return isUtility(hotbarSlot);
         }
         if (preferred < 0) {
-            return isHotbar(hotbarSlot);
+            return isHotbar(hotbarSlot) && !isLockedSkillSlot(hotbarSlot);
         }
         return hotbarSlot == preferred;
     }

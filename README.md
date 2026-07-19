@@ -2,7 +2,7 @@
 
 ## 友谊之约：反制行动
 
-基于 PaperMC 的 3v3 回合制战术竞技插件
+基于 PaperMC 的 3v3/5v5 回合制战术竞技插件
 
 ![PaperMC](https://img.shields.io/badge/PaperMC-Plugin-green)
 ![Java](https://img.shields.io/badge/Java-21%2B-orange)
@@ -22,7 +22,7 @@
 - 战术投掷物系统
 - 可扩展干员接口
 
-玩家将在独立竞技世界中进行 **3v3 爆破对抗**。
+玩家将在独立竞技世界中进行 **3v3/5v5 爆破对抗**。
 
 > 设计参考：Counter-Strike、无畏契约、三角洲行动  
 > 核心理念：枪法决定胜负，道具创造机会，经济决定长期优势。
@@ -609,7 +609,7 @@ delta_force_strike
 
 ```
 /dfs setspawn
-/dfs setsite
+/dfs setsite [a/b]
 ```
 
 即可开始一场 Minecraft 战术爆破比赛。

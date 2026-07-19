@@ -1,0 +1,204 @@
+# ============================================================
+# DeltaForceStrike - 干员配置
+# 路径: plugins/DeltaForceStrike/operators.yml
+# 修改后: /dfs reload（OperatorService.reload）或重启
+# ============================================================
+
+settings:
+  ultimate-points-per-kill: 1
+  ultimate-points-per-round: 1
+
+operators:
+
+  # ------------------------------------------------------------------
+  # 妮可 Niko - 突击
+  # ------------------------------------------------------------------
+  niko:
+    display-name: "妮可"
+    english-name: "Niko"
+    type: ASSAULT
+
+    passive:
+      id: niko_passive
+      name: "快人一步！"
+      description: "始终获得速度 I"
+      handler: none
+      effects:
+        - potion: speed
+          amplifier: 0
+          ambient: true
+
+    signature:
+      id: niko_dash
+      name: "DASH！"
+      description: "末影珍珠；60 秒恢复，击杀 -30 秒"
+      handler: ender_pearl
+      max-charges: 1
+      initial-charges: 1
+      recharge-seconds: 60
+      kill-cooldown-reduction: 30
+
+    purchasable:
+      id: niko_teleporter
+      name: "我不打了！"
+      description: "放置应急避险装置，可传送一次"
+      handler: emergency_beacon
+      max-uses: 2
+
+    ultimate:
+      id: niko_berserk
+      name: "狂起来吧！"
+      description: "本回合速度 II + 跳跃 I + 抗性 I + 力量 I"
+      handler: niko_berserk
+      cost: 4
+      duration-seconds: 0
+      effects:
+        - potion: speed
+          amplifier: 1
+          ambient: false
+        - potion: jump_boost
+          amplifier: 0
+          ambient: false
+        - potion: resistance
+          amplifier: 0
+          ambient: false
+        - potion: strength
+          amplifier: 0
+          ambient: false
+
+  # ------------------------------------------------------------------
+  # 布若 Bruo - 工程
+  # ------------------------------------------------------------------
+  bruo:
+    display-name: "布若"
+    english-name: "Bruo"
+    type: ENGINEER
+
+    passive:
+      id: bruo_passive
+      name: "久经沙场"
+      description: "始终获得抗性提升 I"
+      handler: none
+      effects:
+        - potion: resistance
+          amplifier: 0
+          ambient: true
+
+    signature:
+      id: bruo_splash
+      name: "老贝榨"
+      description: "喷溅瞬间伤害 I"
+      handler: splash_harming
+      max-charges: 2
+      initial-charges: 1
+      recharge-seconds: 45
+      kill-cooldown-reduction: 30
+      potion-amplifier: 0
+
+    purchasable:
+      id: bruo_slow
+      name: "断后"
+      description: "滞留型迟缓"
+      handler: lingering_slowness
+      max-uses: 1
+      duration-ticks: 120
+      radius: 3.0
+      amplifier: 0
+
+    ultimate:
+      id: bruo_tnt
+      name: "TNT"
+      description: "原地释放引燃 TNT"
+      handler: primed_tnt
+      cost: 4
+      fuse-ticks: 40
+      yield: 2.0
+
+  # ------------------------------------------------------------------
+  # 艾尔 Aier - 医疗
+  # ------------------------------------------------------------------
+  aier:
+    display-name: "艾尔"
+    english-name: "Aier"
+    type: MEDIC
+
+    passive:
+      id: aier_passive
+      name: "随行医师"
+      description: "存活时队伍成员（含自己）免疫负面效果"
+      handler: team_cleanse
+      tick-interval: 10
+
+    signature:
+      id: aier_regen
+      name: "生命恩典"
+      description: "喷溅再生 II"
+      handler: splash_regen
+      max-charges: 1
+      initial-charges: 1
+      recharge-seconds: 50
+      kill-cooldown-reduction: 30
+      potion-amplifier: 1
+      potion-duration-ticks: 440
+
+    purchasable:
+      id: aier_smoke
+      name: "强效烟幕"
+      description: "投掷型高粒子烟幕，落地持续 90 秒"
+      handler: round_smoke
+      max-uses: 1
+      radius: 5.0
+      duration-seconds: 90
+      particle-multiplier: 2.0
+
+    ultimate:
+      id: aier_undead
+      name: "亡灵"
+      description: "队友倒地时召唤 2 只 1HP 恼鬼攻击敌人"
+      handler: summon_vex
+      cost: 4
+      count: 2
+      health: 1.0
+      require-downed-teammate: true
+
+  # ------------------------------------------------------------------
+  # 骛龙 Wulong - 侦察
+  # ------------------------------------------------------------------
+  wulong:
+    display-name: "骛龙"
+    english-name: "Wulong"
+    type: SCOUT
+
+    passive:
+      id: wulong_passive
+      name: "暗流涌动"
+      description: "潜行时获得速度 II"
+      handler: sneak_speed
+      amplifier: 1
+
+    signature:
+      id: wulong_recon
+      name: "深入腹地"
+      description: "侦查箭，半径 8 圆柱高亮敌人"
+      handler: recon_arrow
+      max-charges: 1
+      initial-charges: 1
+      recharge-seconds: 50
+      kill-cooldown-reduction: 30
+      radius: 8.0
+      glow-seconds: 3
+
+    purchasable:
+      id: wulong_wind
+      name: "腾龙踏云"
+      description: "风弹"
+      handler: wind_charge
+      max-uses: 1
+
+    ultimate:
+      id: wulong_silence
+      name: "来打CS吧！"
+      description: "禁用所有玩家技能 15 秒（含己方）"
+      handler: global_silence
+      cost: 4
+      duration-seconds: 15

@@ -3,11 +3,16 @@ package org.starset.deltaforcestrike.bomb;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import io.papermc.paper.registry.RegistryAccess;
+import io.papermc.paper.registry.RegistryKey;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.SoundCategory;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TNTPrimed;
@@ -27,12 +32,14 @@ import org.starset.deltaforcestrike.util.BombSites;
 import org.starset.deltaforcestrike.util.InventorySlots;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
 /**
  * 改造 TNT：包点安装 / 引信读秒 / 拆除。
- * 引信：fuseLeft 为剩余整秒；每 20 tick 减 1，减到 0 当帧 explode（显示 1 的那一秒结束后立刻炸）。
+ * 引信：fuseLeft 为剩余整秒；每 20 tick 减 1，减到 0 当帧 explode。
+ * 滴滴：安放点音符盒音效；&gt;10s 半径 50；≤10s 加速且听音半径扩至 200。
  */
 public class BombManager {
 
@@ -42,7 +49,10 @@ public class BombManager {
     private Location plantLocation;
     private TNTPrimed primed;
     private BukkitTask fuseTask;
+    private BukkitTask beepTask;
     private int fuseLeft = -1;
+    /** 距下次滴滴的 tick 倒计时 */
+    private int beepCooldownTicks;
 
     private final Map<UUID, BukkitTask> channelTasks = new HashMap<>();
     private final Map<UUID, BossBar> channelBars = new HashMap<>();
@@ -82,7 +92,7 @@ public class BombManager {
 
     public boolean tryBeginPlant(Player player, Block against) {
         Match match = plugin.getMatchManager().getMatch();
-        if (!canPlant(player, match)) {
+        if (cannotPlant(player, match)) {
             return false;
         }
         if (planted) {
@@ -112,7 +122,7 @@ public class BombManager {
         startChannel(player, plantTime,
                 Component.text("安装改造TNT…", NamedTextColor.RED),
                 () -> {
-                    if (!canPlant(player, plugin.getMatchManager().getMatch()) || planted) {
+                    if (cannotPlant(player, plugin.getMatchManager().getMatch()) || planted) {
                         return;
                     }
                     if (!BombSites.isInAnySite(player.getLocation())) {
@@ -124,15 +134,16 @@ public class BombManager {
         return true;
     }
 
-    private boolean canPlant(Player player, Match match) {
+    /** @return true 表示当前不可安装 */
+    private boolean cannotPlant(Player player, Match match) {
         if (match == null || match.getState() != MatchState.IN_PROGRESS) {
-            return false;
+            return true;
         }
         if (match.getRoundManager().getState() != RoundState.COMBAT) {
-            return false;
+            return true;
         }
         PlayerSession s = match.getSession(player.getUniqueId());
-        return s != null && s.getTeam() == Team.T && s.isAlive();
+        return s == null || s.getTeam() != Team.T || !s.isAlive();
     }
 
     private void finishPlant(Player player, Location loc) {
@@ -165,13 +176,14 @@ public class BombManager {
         match.getRoundManager().onBombPlanted();
 
         cancelFuse();
+        startBeepLoop();
+        // 安装瞬间先滴一声
+        playPlantBeep();
+
         /*
          * 时间线（explosion-time=40）：
          * t=0  安装，显示 40
-         * t=1s 40→39
-         * ...
-         * t=39s 显示 1
-         * t=40s 1→0 当帧 explode  （不会在显示 1 时再多等一整秒才炸）
+         * t=1s 40→39 … t=40s 1→0 当帧 explode
          */
         fuseTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (!planted) {
@@ -198,6 +210,182 @@ public class BombManager {
                         Particle.SMOKE, primed.getLocation(), 5, 0.2, 0.2, 0.2, 0.01);
             }
         }, 20L, 20L);
+    }
+
+    // =====================================================================
+    // 滴滴音效（音符盒 · 与引信并行）
+    // =====================================================================
+
+    private void startBeepLoop() {
+        cancelBeep();
+        beepCooldownTicks = 0;
+        beepTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (!planted || plantLocation == null) {
+                cancelBeep();
+                return;
+            }
+            if (beepCooldownTicks > 0) {
+                beepCooldownTicks--;
+                return;
+            }
+            playPlantBeep();
+            beepCooldownTicks = Math.max(1, currentBeepIntervalTicks() - 1);
+        }, 1L, 1L);
+    }
+
+    private void cancelBeep() {
+        if (beepTask != null) {
+            beepTask.cancel();
+            beepTask = null;
+        }
+        beepCooldownTicks = 0;
+    }
+
+    /**
+     * &gt;10s：约 1 次/秒；≤10s：间隔从 ~1s 线性加速到 ~0.1s。
+     */
+    private int currentBeepIntervalTicks() {
+        int early = plugin.getConfig().getInt("bomb.beep.early-interval-ticks", 20);
+        int lateMin = plugin.getConfig().getInt("bomb.beep.late-min-interval-ticks", 2);
+        int threshold = plugin.getConfig().getInt("bomb.beep.late-threshold-seconds", 10);
+        early = Math.max(2, early);
+        lateMin = Math.max(1, Math.min(lateMin, early));
+        threshold = Math.max(1, threshold);
+
+        if (fuseLeft > threshold) {
+            return early;
+        }
+        // fuseLeft: threshold → 0  时 interval: early → lateMin
+        double t = Math.max(0.0, Math.min(1.0, (double) fuseLeft / threshold));
+        return Math.max(lateMin, (int) Math.round(lateMin + (early - lateMin) * t));
+    }
+
+    /** 听音半径：早期 50；最后 threshold 秒内线性扩到 200 */
+    private double currentBeepRadius() {
+        double earlyR = plugin.getConfig().getDouble("bomb.beep.early-radius", 50.0);
+        double lateR = plugin.getConfig().getDouble("bomb.beep.late-max-radius", 200.0);
+        int threshold = plugin.getConfig().getInt("bomb.beep.late-threshold-seconds", 10);
+        threshold = Math.max(1, threshold);
+        if (fuseLeft > threshold) {
+            return earlyR;
+        }
+        double t = Math.max(0.0, Math.min(1.0, 1.0 - (double) fuseLeft / threshold));
+        return earlyR + (lateR - earlyR) * t;
+    }
+
+    private float currentBeepPitch() {
+        int threshold = plugin.getConfig().getInt("bomb.beep.late-threshold-seconds", 10);
+        threshold = Math.max(1, threshold);
+        if (fuseLeft > threshold) {
+            return 0.9f;
+        }
+        double t = Math.max(0.0, Math.min(1.0, 1.0 - (double) fuseLeft / threshold));
+        return (float) (0.9 + 0.9 * t); // 0.9 → 1.8
+    }
+
+    private void playPlantBeep() {
+        if (!plugin.getConfig().getBoolean("bomb.beep.enabled", true)) {
+            return;
+        }
+        Location loc = plantLocation;
+        if (loc == null && primed != null && primed.isValid()) {
+            loc = primed.getLocation();
+        }
+        if (loc == null || loc.getWorld() == null) {
+            return;
+        }
+
+        Sound sound = resolveBeepSound();
+        double radius = currentBeepRadius();
+        float pitch = currentBeepPitch();
+        // volume 按半径放大，保证远处仍能听清方向
+        float volume = (float) Math.max(1.0, radius / 16.0);
+
+        World world = loc.getWorld();
+        double rSq = radius * radius;
+        Match match = plugin.getMatchManager().getMatch();
+
+        for (Player p : world.getPlayers()) {
+            if (match != null && !match.contains(p.getUniqueId())) {
+                continue;
+            }
+            if (p.getLocation().distanceSquared(loc) > rSq) {
+                continue;
+            }
+            // 在安放点播放，保留方位感
+            p.playSound(loc, sound, SoundCategory.BLOCKS, volume, pitch);
+        }
+    }
+
+    /**
+     * 通过 Registry 解析音效（避免 1.21.3+ 已弃用的 Sound.valueOf）。
+     * 配置可写：block.note_block.pling / BLOCK_NOTE_BLOCK_PLING / pling
+     */
+    private Sound resolveBeepSound() {
+        Sound fallback = registrySound("block.note_block.pling");
+        String raw = plugin.getConfig().getString("bomb.beep.sound", "block.note_block.pling");
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        Sound sound = registrySound(toSoundPath(raw));
+        return sound != null ? sound : fallback;
+    }
+
+    private static Sound registrySound(String path) {
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        try {
+            String p = path.toLowerCase(Locale.ROOT).replace("minecraft:", "").trim();
+            NamespacedKey nk = NamespacedKey.minecraft(p);
+            return RegistryAccess.registryAccess()
+                    .getRegistry(RegistryKey.SOUND_EVENT)
+                    .get(nk);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** 枚举名 / 路径 → minecraft 音效路径 */
+    private static String toSoundPath(String raw) {
+        String s = raw.trim().toLowerCase(Locale.ROOT)
+                .replace("minecraft:", "")
+                .replace('-', '_')
+                .replace(' ', '_');
+        if (s.isEmpty() || "pling".equals(s)) {
+            return "block.note_block.pling";
+        }
+        // 已是 registry 路径
+        if (s.contains(".")) {
+            return s.replace("block.note.block.", "block.note_block.");
+        }
+        // BLOCK_NOTE_BLOCK_PLING 风格
+        if (s.startsWith("block_note_block_")) {
+            return "block.note_block." + s.substring("block_note_block_".length());
+        }
+        if (s.startsWith("block_")) {
+            String rest = s.substring("block_".length());
+            int last = rest.lastIndexOf('_');
+            if (last > 0) {
+                return "block." + rest.substring(0, last) + "." + rest.substring(last + 1);
+            }
+            return "block." + rest;
+        }
+        if (s.startsWith("entity_")) {
+            String rest = s.substring("entity_".length());
+            int last = rest.lastIndexOf('_');
+            if (last > 0) {
+                return "entity." + rest.substring(0, last) + "." + rest.substring(last + 1);
+            }
+            return "entity." + rest;
+        }
+        if (s.startsWith("ui_")) {
+            return "ui." + s.substring("ui_".length()).replace('_', '.');
+        }
+        if (s.startsWith("note_block_")) {
+            return "block.note_block." + s.substring("note_block_".length());
+        }
+        return "block.note_block." + s;
     }
 
     private void explode() {
@@ -297,7 +485,7 @@ public class BombManager {
 
     public boolean tryBeginDefuse(Player player) {
         Match match = plugin.getMatchManager().getMatch();
-        if (!canDefuse(player, match)) {
+        if (cannotDefuse(player, match)) {
             return false;
         }
         if (!planted || plantLocation == null) {
@@ -319,7 +507,7 @@ public class BombManager {
         startChannel(player, time,
                 Component.text(kit ? "拆除中（拆除钳）…" : "拆除中（空手）…", NamedTextColor.GREEN),
                 () -> {
-                    if (!planted || !canDefuse(player, plugin.getMatchManager().getMatch())) {
+                    if (!planted || cannotDefuse(player, plugin.getMatchManager().getMatch())) {
                         return;
                     }
                     if (plantLocation != null
@@ -331,16 +519,17 @@ public class BombManager {
         return true;
     }
 
-    private boolean canDefuse(Player player, Match match) {
+    /** @return true 表示当前不可拆除 */
+    private boolean cannotDefuse(Player player, Match match) {
         if (match == null || match.getState() != MatchState.IN_PROGRESS) {
-            return false;
+            return true;
         }
         RoundState rs = match.getRoundManager().getState();
         if (rs != RoundState.BOMB_PLANTED && rs != RoundState.COMBAT) {
-            return false;
+            return true;
         }
         PlayerSession s = match.getSession(player.getUniqueId());
-        return s != null && s.getTeam() == Team.CT && s.isAlive();
+        return s == null || s.getTeam() != Team.CT || !s.isAlive();
     }
 
     private void finishDefuse(Player player) {
@@ -432,6 +621,7 @@ public class BombManager {
             fuseTask.cancel();
             fuseTask = null;
         }
+        cancelBeep();
     }
 
     public boolean isOurPrimed(TNTPrimed tnt) {

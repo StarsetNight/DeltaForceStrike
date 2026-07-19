@@ -25,6 +25,8 @@ import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
+import org.starset.deltaforcestrike.operator.OperatorService;
+import org.starset.deltaforcestrike.operator.SkillKind;
 import org.starset.deltaforcestrike.util.ConfigKeys;
 import org.starset.deltaforcestrike.util.InventorySlots;
 import org.starset.deltaforcestrike.util.ItemPlacement;
@@ -411,6 +413,21 @@ public class InventoryLockListener implements Listener {
 
         ItemManager items = plugin.getItemManager();
         ItemStack stack = event.getItemDrop().getItemStack();
+        OperatorService ops = plugin.getOperatorService();
+
+        // 技能：禁止丢弃（避免满地大招捡不回）
+        if (ops != null && ops.isSkillStack(stack)) {
+            event.setCancelled(true);
+            deny(player, "技能物品不可丢弃。");
+            // 若已从槽位移出，下一 tick 补回
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                var load = ops.getLoadout(player.getUniqueId());
+                if (load != null) {
+                    ops.giveSkillHotbarItems(player, load);
+                }
+            });
+            return;
+        }
 
         if (isSkillItem(items, stack)) {
             event.setCancelled(true);
@@ -433,10 +450,13 @@ public class InventoryLockListener implements Listener {
         }
 
         if (InventorySlots.isLockedSkillSlot(player.getInventory().getHeldItemSlot())) {
-            event.setCancelled(true);
-            deny(player, "技能槽不可丢弃。");
+            // 手持技能槽：禁止 Q 丢
+            ItemStack hand = player.getInventory().getItemInMainHand();
+            if (ops != null && ops.isSkillStack(hand)) {
+                event.setCancelled(true);
+                deny(player, "技能槽不可丢弃。");
+            }
         }
-        // 武器 / 道具 / C4 / 拆除钳 / 箭 可丢
     }
 
     // =====================================================================
@@ -540,8 +560,10 @@ public class InventoryLockListener implements Listener {
             any = true;
 
             for (int k = 0; k < extra; k++) {
-                ItemStack one = stack.clone();
-                one.setAmount(1);
+                ItemStack one = safeClone(stack, 1);
+                if (one == null) {
+                    break;
+                }
                 rekeyInstance(one);
                 if (!tryPlaceInLegalSlot(player, items, one)) {
                     player.getWorld().dropItemNaturally(player.getLocation(), one);
@@ -583,8 +605,7 @@ public class InventoryLockListener implements Listener {
         ItemStack keptShield = null;
         ItemStack off = inv.getItemInOffHand();
         if (isShield(items, off)) {
-            keptShield = off.clone();
-            keptShield.setAmount(1);
+            keptShield = safeClone(off, 1);
         } else if (!isEmpty(off)) {
             inv.setItemInOffHand(null);
             relocateOrDrop(player, items, off);
@@ -597,8 +618,7 @@ public class InventoryLockListener implements Listener {
             }
             inv.setItem(i, null);
             if (keptShield == null) {
-                keptShield = stack.clone();
-                keptShield.setAmount(1);
+                keptShield = safeClone(stack, 1);
             }
         }
 
@@ -606,8 +626,7 @@ public class InventoryLockListener implements Listener {
         if (isShield(items, cursor)) {
             player.setItemOnCursor(null);
             if (keptShield == null) {
-                keptShield = cursor.clone();
-                keptShield.setAmount(1);
+                keptShield = safeClone(cursor, 1);
             }
         }
 
@@ -635,9 +654,10 @@ public class InventoryLockListener implements Listener {
             if (isShield(items, stack)) {
                 inv.setItem(i, null);
                 if (ConfigKeys.shieldEnabled() && isEmpty(inv.getItemInOffHand())) {
-                    ItemStack one = stack.clone();
-                    one.setAmount(1);
-                    inv.setItemInOffHand(one);
+                    ItemStack one = safeClone(stack, 1);
+                    if (one != null) {
+                        inv.setItemInOffHand(one);
+                    }
                 }
                 continue;
             }
@@ -646,9 +666,8 @@ public class InventoryLockListener implements Listener {
                 continue;
             }
             inv.setItem(i, null);
-            ItemStack one = stack.clone();
-            one.setAmount(1);
-            if (!tryPlaceInLegalSlot(player, items, one)) {
+            ItemStack one = safeClone(stack, 1);
+            if (one != null && !tryPlaceInLegalSlot(player, items, one)) {
                 player.getWorld().dropItemNaturally(player.getLocation(), one);
             }
         }
@@ -665,18 +684,16 @@ public class InventoryLockListener implements Listener {
                 continue;
             }
             inv.setItem(i, null);
-            ItemStack one = stack.clone();
-            one.setAmount(1);
-            if (!tryPlaceInLegalSlot(player, items, one)) {
+            ItemStack one = safeClone(stack, 1);
+            if (one != null && !tryPlaceInLegalSlot(player, items, one)) {
                 player.getWorld().dropItemNaturally(player.getLocation(), one);
             }
         }
 
         ItemStack cursor = player.getItemOnCursor();
         if (isCustomItem(items, cursor) && !isShield(items, cursor) && !isAllowedVanilla(cursor)) {
-            ItemStack clone = cursor.clone();
-            clone.setAmount(1);
-            if (tryPlaceInLegalSlot(player, items, clone)) {
+            ItemStack clone = safeClone(cursor, 1);
+            if (clone != null && tryPlaceInLegalSlot(player, items, clone)) {
                 player.setItemOnCursor(null);
             }
         }
@@ -688,6 +705,31 @@ public class InventoryLockListener implements Listener {
         }
         if (isAllowedVanilla(stack)) {
             return player.getInventory().addItem(stack).isEmpty();
+        }
+
+        // 技能 → 固定 6/7/8
+        OperatorService ops = plugin.getOperatorService();
+        if (ops != null && ops.isSkillStack(stack)) {
+            SkillKind kind = ops.getSkillKind(stack);
+            int slot = switch (kind == null ? SkillKind.PASSIVE : kind) {
+                case SIGNATURE -> InventorySlots.SIGNATURE;
+                case PURCHASABLE -> InventorySlots.PURCHASABLE;
+                case ULTIMATE -> InventorySlots.ULTIMATE;
+                default -> -1;
+            };
+            if (slot < 0) {
+                return false;
+            }
+            ItemStack cur = player.getInventory().getItem(slot);
+            if (!isEmpty(cur) && !(ops.isSkillStack(cur) && ops.getSkillKind(cur) == kind)) {
+                return false;
+            }
+            ItemStack one = safeClone(stack, 1);
+            if (one == null) {
+                return false;
+            }
+            player.getInventory().setItem(slot, one);
+            return true;
         }
 
         stack.setAmount(1);
@@ -718,7 +760,6 @@ public class InventoryLockListener implements Listener {
 
         PlayerInventory inv = player.getInventory();
 
-        // 槽 2：C4 / 拆除钳
         if (isBombOrDefuse(type, slotHint, id, action)) {
             return ItemPlacement.putInSlot(inv, InventorySlots.BOMB, stack, items, false);
         }
@@ -735,7 +776,7 @@ public class InventoryLockListener implements Listener {
             return ItemPlacement.putInSlot(inv, empty, stack, items, false);
         }
 
-        if (preferred >= 0 && preferred <= 8) {
+        if (preferred >= 0 && preferred <= 5) {
             return ItemPlacement.putInSlot(inv, preferred, stack, items, false);
         }
 
@@ -850,11 +891,26 @@ public class InventoryLockListener implements Listener {
     }
 
     private boolean canPlaceInHotbar(ItemManager items, ItemStack stack, int hotbarSlot) {
+        OperatorService ops = plugin.getOperatorService();
+        if (ops != null && ops.isSkillStack(stack)) {
+            SkillKind kind = ops.getSkillKind(stack);
+            if (kind == SkillKind.SIGNATURE) {
+                return hotbarSlot == InventorySlots.SIGNATURE;
+            }
+            if (kind == SkillKind.PURCHASABLE) {
+                return hotbarSlot == InventorySlots.PURCHASABLE;
+            }
+            if (kind == SkillKind.ULTIMATE) {
+                return hotbarSlot == InventorySlots.ULTIMATE;
+            }
+            return false;
+        }
+
         if (ConfigKeys.shieldEnabled() && isShield(items, stack)) {
             return false;
         }
         if (isAllowedVanilla(stack)) {
-            return hotbarSlot >= 3 && hotbarSlot <= 8;
+            return hotbarSlot >= 3 && hotbarSlot <= 5;
         }
         String type = getType(stack);
         String id = items.getItemId(stack);
@@ -909,7 +965,7 @@ public class InventoryLockListener implements Listener {
     }
 
     private boolean isShield(ItemManager items, ItemStack stack) {
-        return items.isShield(stack);
+        return stack != null && items.isShield(stack);
     }
 
     private boolean isSkillItem(ItemManager items, ItemStack stack) {
@@ -950,6 +1006,18 @@ public class InventoryLockListener implements Listener {
 
     private boolean isEmpty(ItemStack stack) {
         return stack == null || stack.getType().isAir() || stack.getAmount() <= 0;
+    }
+
+    /** null/空气安全 clone；amount<=0 时保留原数量。 */
+    private ItemStack safeClone(ItemStack stack, int amount) {
+        if (stack == null || stack.getType().isAir()) {
+            return null;
+        }
+        ItemStack clone = stack.clone();
+        if (amount > 0) {
+            clone.setAmount(amount);
+        }
+        return clone;
     }
 
     private void deny(Player player, String msg) {

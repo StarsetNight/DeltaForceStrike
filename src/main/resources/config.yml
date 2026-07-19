@@ -11,9 +11,9 @@ world:
 # ---------- 队列（人数唯一来源，不要再写 game.max-player）----------
 queue:
   # 每队人数（3v3 改为 3）
-  team-size: 3
+  team-size: 5
   # 总人数（注意是 max-players）
-  max-players: 6
+  max-players: 10
   # 满人后倒计时（秒）
   countdown-seconds: 15
   # 倒计时中人数不足是否取消
@@ -28,9 +28,8 @@ queue:
 # ---------- 干员 ----------
 operator:
   enabled: true
-  # false = 暂不开放选择，倒计时后直接开打
-  select-enabled: false
-  select-seconds: 45
+  select-enabled: true
+  select-seconds: 45          # 超时仍强制开打
 
 guide:
   # 新加入队列时是否自动发送玩法
@@ -98,9 +97,18 @@ bomb:
   explosion-time: 40
   defuse-time: 10
   defuse-time-with-kit: 5
-  damage: 30
-  damage-radius: 12
+  damage: 25
+  damage-radius: 25
   damage-falloff: true
+  # 安放后滴滴（音符盒）；>10s 慢滴半径 50；≤10s 加速且半径扩到 200
+  beep:
+    enabled: true
+    sound: block.note_block.pling   # 或 BLOCK_NOTE_BLOCK_PLING（Registry 解析，无 valueOf）
+    early-interval-ticks: 20    # >10s 约 1 次/秒
+    early-radius: 50
+    late-threshold-seconds: 10
+    late-min-interval-ticks: 2  # 最后约 10 次/秒
+    late-max-radius: 200
   sites:
     a:
       world: delta_force_strike

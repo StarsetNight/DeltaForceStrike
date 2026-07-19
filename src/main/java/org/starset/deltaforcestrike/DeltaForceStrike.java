@@ -10,10 +10,22 @@ import org.starset.deltaforcestrike.game.GameRulesService;
 import org.starset.deltaforcestrike.grenade.GrenadeService;
 import org.starset.deltaforcestrike.item.ItemGiveService;
 import org.starset.deltaforcestrike.item.ItemManager;
-import org.starset.deltaforcestrike.listener.*;
+import org.starset.deltaforcestrike.listener.ArenaPlayerListener;
+import org.starset.deltaforcestrike.listener.BombListener;
+import org.starset.deltaforcestrike.listener.BuyZoneListener;
+import org.starset.deltaforcestrike.listener.GameModeLockListener;
+import org.starset.deltaforcestrike.listener.GameRulesListener;
+import org.starset.deltaforcestrike.listener.GrenadeListener;
+import org.starset.deltaforcestrike.listener.InventoryLockListener;
+import org.starset.deltaforcestrike.listener.ItemProtectListener;
+import org.starset.deltaforcestrike.listener.OperatorSkillListener;
+import org.starset.deltaforcestrike.listener.PickupListener;
+import org.starset.deltaforcestrike.listener.SpectatorLockListener;
 import org.starset.deltaforcestrike.manager.GameManager;
 import org.starset.deltaforcestrike.match.MatchManager;
+import org.starset.deltaforcestrike.operator.OperatorService;
 import org.starset.deltaforcestrike.scoreboard.GameScoreboard;
+import org.starset.deltaforcestrike.scoreboard.NametagService;
 import org.starset.deltaforcestrike.scoreboard.TabListService;
 import org.starset.deltaforcestrike.shop.ShopListener;
 import org.starset.deltaforcestrike.spectator.SpectatorLockService;
@@ -21,7 +33,7 @@ import org.starset.deltaforcestrike.util.Worlds;
 
 /**
  * 友谊之约：反制行动 — 主类
- * 单世界 delta_force_strike / 单对局
+ * 单世界 delta_force_strike / 全服单对局
  */
 public final class DeltaForceStrike extends JavaPlugin {
 
@@ -33,10 +45,12 @@ public final class DeltaForceStrike extends JavaPlugin {
     private GameRulesService gameRulesService;
     private GameScoreboard scoreboardService;
     private TabListService tabListService;
+    private NametagService nametagService;
     private BombManager bombManager;
     private GrenadeService grenadeService;
-    private InventoryLockListener inventoryLockListener;
+    private OperatorService operatorService;
     private SpectatorLockService spectatorLockService;
+    private InventoryLockListener inventoryLockListener;
 
     @Override
     public void onEnable() {
@@ -48,20 +62,25 @@ public final class DeltaForceStrike extends JavaPlugin {
                     + " — 请先创建该世界，否则队列/对局无法正常工作。");
         }
 
-        // ---------- 核心服务 ----------
+        // ---------- 物品 ----------
         itemManager = new ItemManager(this);
         itemManager.loadItems();
         itemGiveService = new ItemGiveService(itemManager);
 
+        // ---------- 规则 / 子系统 ----------
         gameRulesService = new GameRulesService(this);
         gameRulesService.applyToArenaWorld();
 
         bombManager = new BombManager(this);
         grenadeService = new GrenadeService(this);
+        operatorService = new OperatorService(this);
+
         scoreboardService = new GameScoreboard(this);
         tabListService = new TabListService(this);
-        gameManager = new GameManager(this);
+        nametagService = new NametagService(this);
         spectatorLockService = new SpectatorLockService(this);
+
+        gameManager = new GameManager(this);
 
         // ---------- 命令 ----------
         PluginCommand dfs = getCommand("dfs");
@@ -86,6 +105,7 @@ public final class DeltaForceStrike extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new BombListener(this), this);
         getServer().getPluginManager().registerEvents(new ShopListener(this), this);
         getServer().getPluginManager().registerEvents(new GrenadeListener(this, grenadeService), this);
+        getServer().getPluginManager().registerEvents(new OperatorSkillListener(this), this);
         getServer().getPluginManager().registerEvents(
                 new SpectatorLockListener(this, spectatorLockService), this);
 
@@ -99,18 +119,27 @@ public final class DeltaForceStrike extends JavaPlugin {
             }
         }, 20L, 10L);
 
-        // 世界规则 + 饱食
+        // 世界规则 + 饱食（静默，勿刷 log）
         getServer().getScheduler().runTaskTimer(this, gameRulesService::tick, 40L, 40L);
 
-        // 计分板刷新
+        // 侧边栏 + 铭牌
         getServer().getScheduler().runTaskTimer(this, scoreboardService::tick, 20L, 20L);
 
-        getServer().getScheduler().runTaskTimer(this,
-                () -> spectatorLockService.tickAll(), 20L, 10L);
+        // 旁观锁友方
+        getServer().getScheduler().runTaskTimer(this, spectatorLockService::tickAll, 20L, 10L);
+
+        // 干员被动 / 充能 / 烟幕等
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            if (operatorService != null) {
+                operatorService.tick();
+            }
+        }, 2L, 2L);
 
         getLogger().info("DeltaForceStrike v" + getPluginMeta().getVersion() + " 已启动");
         getLogger().info("竞技世界: " + Worlds.arenaName()
-                + " | 物品: " + itemManager.getAll().size());
+                + " | 物品: " + itemManager.getAll().size()
+                + " | 干员: " + (operatorService.getRegistry() == null
+                ? 0 : operatorService.getRegistry().allUnique().size()));
     }
 
     @Override
@@ -163,6 +192,10 @@ public final class DeltaForceStrike extends JavaPlugin {
         return tabListService;
     }
 
+    public NametagService getNametagService() {
+        return nametagService;
+    }
+
     public BombManager getBombManager() {
         return bombManager;
     }
@@ -171,11 +204,15 @@ public final class DeltaForceStrike extends JavaPlugin {
         return grenadeService;
     }
 
-    public InventoryLockListener getInventoryLockListener() {
-        return inventoryLockListener;
+    public OperatorService getOperatorService() {
+        return operatorService;
     }
 
     public SpectatorLockService getSpectatorLockService() {
         return spectatorLockService;
+    }
+
+    public InventoryLockListener getInventoryLockListener() {
+        return inventoryLockListener;
     }
 }
