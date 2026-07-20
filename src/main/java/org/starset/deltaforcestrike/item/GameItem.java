@@ -19,6 +19,10 @@ public final class GameItem {
     private final String action;
     private final String slot;
     private final boolean undroppable;
+    /** 自定义最大耐久；≤0 表示使用材质默认 */
+    private final int maxDurability;
+    /** 攻击伤害覆盖；≤0 表示不覆盖（走材质+附魔） */
+    private final double attackDamage;
     private final Map<String, Integer> enchantments;
     private final Map<String, Material> armorPieces;
 
@@ -32,6 +36,8 @@ public final class GameItem {
         this.action = b.action;
         this.slot = b.slot;
         this.undroppable = b.undroppable;
+        this.maxDurability = b.maxDurability;
+        this.attackDamage = b.attackDamage;
         this.enchantments = Collections.unmodifiableMap(b.enchantments);
         this.armorPieces = Collections.unmodifiableMap(b.armorPieces);
     }
@@ -46,6 +52,8 @@ public final class GameItem {
         b.action = section.getString("action", "");
         b.slot = section.getString("slot", "");
         b.undroppable = section.getBoolean("undroppable", false);
+        b.maxDurability = section.getInt("max-durability", 0);
+        b.attackDamage = section.getDouble("attack-damage", 0);
 
         String mat = section.getString("material");
         if (mat != null && !mat.isEmpty()) {
@@ -85,6 +93,10 @@ public final class GameItem {
     public String getAction() { return action; }
     public String getSlot() { return slot; }
     public boolean isUndroppable() { return undroppable; }
+    /** ≤0 = 默认耐久 */
+    public int getMaxDurability() { return maxDurability; }
+    /** ≤0 = 不覆盖攻击伤害 */
+    public double getAttackDamage() { return attackDamage; }
     public Map<String, Integer> getEnchantments() { return enchantments; }
     public Map<String, Material> getArmorPieces() { return armorPieces; }
 
@@ -103,6 +115,8 @@ public final class GameItem {
         Material material;
         int price;
         boolean undroppable;
+        int maxDurability;
+        double attackDamage;
         Map<String, Integer> enchantments = new HashMap<>();
         Map<String, Material> armorPieces = new HashMap<>();
     }

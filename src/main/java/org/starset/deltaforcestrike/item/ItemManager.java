@@ -6,12 +6,16 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.EquipmentSlotGroup;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.starset.deltaforcestrike.DeltaForceStrike;
@@ -173,6 +177,8 @@ public class ItemManager {
         }
 
         applyEnchantments(stack, def);
+        applyCustomDurability(stack, def);
+        applyAttackDamage(stack, def);
 
         // 附魔后再次确保：诅咒 / 不堆叠 / 实例 ID / amount=1
         ItemMeta m2 = stack.getItemMeta();
@@ -362,6 +368,148 @@ public class ItemManager {
                         + "（请用 registry 名如 quick_charge / piercing / multishot）");
             }
         }
+    }
+
+    /**
+     * attack-damage: 覆盖主手攻击伤害为固定值（如 20）。
+     * 使用 ADD_NUMBER 加到玩家基础 1 点上，故 amount = 目标伤害 - 1。
+     * 会清除主手原有 ATTACK_DAMAGE 修饰符，避免与材质默认叠算。
+     */
+    private void applyAttackDamage(ItemStack stack, GameItem def) {
+        if (stack == null || def == null || def.getAttackDamage() <= 0) {
+            return;
+        }
+        double target = def.getAttackDamage();
+        ItemMeta meta = stack.getItemMeta();
+        if (meta == null) {
+            return;
+        }
+
+        Attribute attr = resolveAttackDamageAttribute();
+        if (attr == null) {
+            plugin.getLogger().warning("无法解析 ATTACK_DAMAGE 属性 @ " + def.getId());
+            return;
+        }
+
+        try {
+            meta.removeAttributeModifier(attr);
+        } catch (Throwable ignored) {
+        }
+
+        // 玩家空手基础伤害 1.0；最终 ≈ 1 + amount
+        double amount = target - 1.0;
+        NamespacedKey key = new NamespacedKey(plugin, "dfs_atk_" + safeKey(def.getId()));
+
+        AttributeModifier mod = null;
+        // Paper 1.21+：NamespacedKey + EquipmentSlotGroup
+        try {
+            mod = new AttributeModifier(
+                    key,
+                    amount,
+                    AttributeModifier.Operation.ADD_NUMBER,
+                    EquipmentSlotGroup.MAINHAND
+            );
+        } catch (Throwable t1) {
+            try {
+                // 旧 API：UUID + EquipmentSlot
+                mod = AttributeModifier.class
+                        .getConstructor(UUID.class, String.class, double.class,
+                                AttributeModifier.Operation.class,
+                                org.bukkit.inventory.EquipmentSlot.class)
+                        .newInstance(
+                                UUID.nameUUIDFromBytes(key.toString().getBytes()),
+                                "dfs_atk",
+                                amount,
+                                AttributeModifier.Operation.ADD_NUMBER,
+                                org.bukkit.inventory.EquipmentSlot.HAND
+                        );
+            } catch (Throwable t2) {
+                plugin.getLogger().warning("创建攻击伤害修饰符失败 @ " + def.getId()
+                        + ": " + t2.getMessage());
+                return;
+            }
+        }
+
+        try {
+            meta.addAttributeModifier(attr, mod);
+            // 显示属性行，方便确认
+            try {
+                meta.removeItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+            } catch (Throwable ignored) {
+            }
+            stack.setItemMeta(meta);
+        } catch (Throwable t) {
+            plugin.getLogger().warning("写入攻击伤害失败 @ " + def.getId() + ": " + t.getMessage());
+        }
+    }
+
+    private static Attribute resolveAttackDamageAttribute() {
+        // 现代 API（1.21+）
+        try {
+            return Attribute.ATTACK_DAMAGE;
+        } catch (Throwable ignored) {
+        }
+        // Registry（无 valueOf 弃用警告）
+        try {
+            var reg = RegistryAccess.registryAccess()
+                    .getRegistry(RegistryKey.ATTRIBUTE);
+            Attribute a = reg.get(NamespacedKey.minecraft("attack_damage"));
+            if (a != null) {
+                return a;
+            }
+            a = reg.get(NamespacedKey.minecraft("generic.attack_damage"));
+            if (a != null) {
+                return a;
+            }
+        } catch (Throwable ignored) {
+        }
+        // 反射读旧常量，避免编译期 valueOf 弃用
+        try {
+            Object v = Attribute.class.getField("GENERIC_ATTACK_DAMAGE").get(null);
+            if (v instanceof Attribute attr) {
+                return attr;
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static String safeKey(String id) {
+        if (id == null || id.isEmpty()) {
+            return "item";
+        }
+        return id.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9/._-]", "_");
+    }
+
+    /**
+     * max-durability: 剩余可用次数。
+     * 优先 Paper setMaxDamage；否则用 damage = 材质默认耐久 - 配置值。
+     */
+    private void applyCustomDurability(ItemStack stack, GameItem def) {
+        if (stack == null || def == null || def.getMaxDurability() <= 0) {
+            return;
+        }
+        int want = Math.max(1, def.getMaxDurability());
+        ItemMeta meta = stack.getItemMeta();
+        if (!(meta instanceof Damageable damageable)) {
+            return;
+        }
+        // Paper 1.20.5+：直接设最大耐久
+        try {
+            damageable.getClass().getMethod("setMaxDamage", int.class).invoke(damageable, want);
+            damageable.setDamage(0);
+            stack.setItemMeta(meta);
+            return;
+        } catch (Throwable ignored) {
+        }
+        // 兼容：用已损值模拟「只剩 want 点」
+        int typeMax = stack.getType().getMaxDurability();
+        if (typeMax <= 0) {
+            return;
+        }
+        int remaining = Math.min(want, typeMax);
+        damageable.setDamage(Math.max(0, typeMax - remaining));
+        stack.setItemMeta(meta);
     }
 
     private Enchantment resolveEnchantment(String key) {

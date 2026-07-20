@@ -25,23 +25,24 @@ items:
       name: "§6逆战"
       type: melee
       material: GOLDEN_AXE
-      price: 1800
+      price: 1400
       slot: melee
-      enchantments:
-        unbreaking: 5
+      max-durability: 4
+      # 属性修饰符固定攻击伤害 25（不用锋利叠算，避免无效/不可控）
+      attack-damage: 25
 
     dominator:
       name: "§3主宰"
       type: melee
       material: DIAMOND_SWORD
-      price: 2700
+      price: 2900
       slot: melee
 
     frenzy:
       name: "§c狂袭"
       type: melee
       material: DIAMOND_AXE
-      price: 3700
+      price: 3400
       slot: melee
       enchantments:
         sharpness: 6
@@ -50,14 +51,14 @@ items:
       name: "§f轻弓"
       type: ranged
       material: BOW
-      price: 800
+      price: 500
       slot: ranged
 
     battle-crossbow:
       name: "§f霰弹战弩"
       type: ranged
       material: CROSSBOW
-      price: 1400
+      price: 1200
       slot: ranged
       enchantments:
         quick_charge: 1
@@ -69,7 +70,7 @@ items:
       name: "§b强袭弓"
       type: ranged
       material: BOW
-      price: 1800
+      price: 1400
       slot: ranged
       enchantments:
         power: 3
@@ -78,7 +79,7 @@ items:
       name: "§b连发弩"
       type: ranged
       material: CROSSBOW
-      price: 2900
+      price: 2400
       slot: ranged
       enchantments:
         quick_charge: 3
@@ -89,7 +90,7 @@ items:
       name: "§c猎杀弓"
       type: ranged
       material: BOW
-      price: 4700
+      price: 4500
       slot: ranged
       enchantments:
         power: 6
@@ -152,7 +153,7 @@ items:
       name: "§6高爆火焰弹"
       type: utility
       material: FIRE_CHARGE
-      price: 300
+      price: 200
       action: explosion_fire
       slot: utility
 

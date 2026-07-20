@@ -94,9 +94,9 @@ operators:
       name: "老贝榨"
       description: "喷溅瞬间伤害 I"
       handler: splash_harming
-      max-charges: 2
+      max-charges: 1
       initial-charges: 1
-      recharge-seconds: 45
+      recharge-seconds: 50
       kill-cooldown-reduction: 30
       potion-amplifier: 0
 
@@ -115,7 +115,7 @@ operators:
       name: "TNT"
       description: "原地释放引燃 TNT"
       handler: primed_tnt
-      cost: 4
+      cost: 3
       fuse-ticks: 40
       yield: 2.0
 
@@ -139,8 +139,8 @@ operators:
       name: "生命恩典"
       description: "喷溅再生 II"
       handler: splash_regen
-      max-charges: 1
-      initial-charges: 1
+      max-charges: 2
+      initial-charges: 2
       recharge-seconds: 50
       kill-cooldown-reduction: 30
       potion-amplifier: 1
@@ -184,13 +184,13 @@ operators:
     signature:
       id: wulong_recon
       name: "深入腹地"
-      description: "侦查箭，半径 24 圆柱高亮敌人"
+      description: "侦查箭，半径 30 圆柱高亮敌人"
       handler: recon_arrow
       max-charges: 1
       initial-charges: 1
       recharge-seconds: 50
       kill-cooldown-reduction: 30
-      radius: 24.0
+      radius: 30.0
       glow-seconds: 3
 
     purchasable:
