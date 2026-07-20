@@ -179,6 +179,7 @@ public class ItemManager {
         applyEnchantments(stack, def);
         applyCustomDurability(stack, def);
         applyAttackDamage(stack, def);
+        applyAttackSpeed(stack, def);
 
         // 附魔后再次确保：诅咒 / 不堆叠 / 实例 ID / amount=1
         ItemMeta m2 = stack.getItemMeta();
@@ -333,7 +334,171 @@ public class ItemManager {
             }
             stack.setItemMeta(meta);
         }
+        // 有自定义韧性时必须写回原版护甲值，否则 Minecraft 会清掉默认护甲
+        if (def.getArmorToughness() > 0 && material != null) {
+            applyArmorPieceAttributes(stack, def, material);
+        }
         return stack;
+    }
+
+    /**
+     * 每件护甲：写回原版护甲值 +（仅胸甲）整套韧性。
+     * 注意：物品一旦带自定义 Attribute，原版默认属性全部失效，必须手动补回 ARMOR。
+     */
+    private void applyArmorPieceAttributes(ItemStack stack, GameItem def, Material material) {
+        if (stack == null || material == null) {
+            return;
+        }
+        ItemMeta meta = stack.getItemMeta();
+        if (meta == null) {
+            return;
+        }
+
+        double armorPts = vanillaArmorPoints(material);
+        double toughnessOnPiece = 0;
+        // 整套韧性全部挂在胸甲，避免 4 件各加一次叠成 16
+        if (material.name().endsWith("_CHESTPLATE") && def.getArmorToughness() > 0) {
+            toughnessOnPiece = def.getArmorToughness();
+        }
+
+        EquipmentSlotGroup group = slotGroupForArmor(material);
+        org.bukkit.inventory.EquipmentSlot legacySlot = legacySlotForArmor(material);
+        if (group == null || legacySlot == null) {
+            return;
+        }
+
+        Attribute armorAttr = resolveAttribute(
+                "ARMOR", "GENERIC_ARMOR", "armor", "generic.armor");
+        Attribute toughAttr = resolveAttribute(
+                "ARMOR_TOUGHNESS", "GENERIC_ARMOR_TOUGHNESS",
+                "armor_toughness", "generic.armor_toughness");
+
+        if (armorAttr != null) {
+            try {
+                meta.removeAttributeModifier(armorAttr);
+            } catch (Throwable ignored) {
+            }
+            AttributeModifier armorMod = createModifier(
+                    new NamespacedKey(plugin, "dfs_armor_" + safeKey(def.getId()) + "_" + material.name().toLowerCase(Locale.ROOT)),
+                    "dfs_armor",
+                    armorPts,
+                    group,
+                    legacySlot
+            );
+            if (armorMod != null) {
+                try {
+                    meta.addAttributeModifier(armorAttr, armorMod);
+                } catch (Throwable t) {
+                    plugin.getLogger().warning("写入护甲值失败 @ " + def.getId() + "/" + material + ": " + t.getMessage());
+                }
+            }
+        }
+
+        if (toughAttr != null && toughnessOnPiece > 0) {
+            try {
+                meta.removeAttributeModifier(toughAttr);
+            } catch (Throwable ignored) {
+            }
+            AttributeModifier toughMod = createModifier(
+                    new NamespacedKey(plugin, "dfs_tough_" + safeKey(def.getId())),
+                    "dfs_tough",
+                    toughnessOnPiece,
+                    group,
+                    legacySlot
+            );
+            if (toughMod != null) {
+                try {
+                    meta.addAttributeModifier(toughAttr, toughMod);
+                } catch (Throwable t) {
+                    plugin.getLogger().warning("写入盔甲韧性失败 @ " + def.getId() + ": " + t.getMessage());
+                }
+            }
+        }
+
+        try {
+            meta.removeItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+        } catch (Throwable ignored) {
+        }
+        stack.setItemMeta(meta);
+    }
+
+    /** 原版各材质护甲值（与 MC 默认一致） */
+    private static double vanillaArmorPoints(Material material) {
+        if (material == null) {
+            return 0;
+        }
+        String n = material.name();
+        // 头盔 / 胸甲 / 护腿 / 靴子
+        if (n.endsWith("_HELMET")) {
+            if (n.startsWith("LEATHER_")) return 1;
+            if (n.startsWith("GOLDEN_") || n.startsWith("CHAINMAIL_")) return 2;
+            if (n.startsWith("IRON_")) return 2;
+            if (n.startsWith("DIAMOND_") || n.startsWith("NETHERITE_")) return 3;
+            if (n.startsWith("TURTLE_")) return 2;
+            return 2;
+        }
+        if (n.endsWith("_CHESTPLATE")) {
+            if (n.startsWith("LEATHER_")) return 3;
+            if (n.startsWith("GOLDEN_") || n.startsWith("CHAINMAIL_")) return 5;
+            if (n.startsWith("IRON_")) return 6;
+            if (n.startsWith("DIAMOND_") || n.startsWith("NETHERITE_")) return 8;
+            return 6;
+        }
+        if (n.endsWith("_LEGGINGS")) {
+            if (n.startsWith("LEATHER_")) return 2;
+            if (n.startsWith("GOLDEN_")) return 3;
+            if (n.startsWith("CHAINMAIL_")) return 4;
+            if (n.startsWith("IRON_")) return 5;
+            if (n.startsWith("DIAMOND_") || n.startsWith("NETHERITE_")) return 6;
+            return 5;
+        }
+        if (n.endsWith("_BOOTS")) {
+            if (n.startsWith("LEATHER_") || n.startsWith("GOLDEN_") || n.startsWith("CHAINMAIL_")) return 1;
+            if (n.startsWith("IRON_")) return 2;
+            if (n.startsWith("DIAMOND_") || n.startsWith("NETHERITE_")) return 3;
+            return 2;
+        }
+        return 0;
+    }
+
+    private static EquipmentSlotGroup slotGroupForArmor(Material material) {
+        if (material == null) {
+            return null;
+        }
+        String n = material.name();
+        if (n.endsWith("_HELMET")) {
+            return EquipmentSlotGroup.HEAD;
+        }
+        if (n.endsWith("_CHESTPLATE")) {
+            return EquipmentSlotGroup.CHEST;
+        }
+        if (n.endsWith("_LEGGINGS")) {
+            return EquipmentSlotGroup.LEGS;
+        }
+        if (n.endsWith("_BOOTS")) {
+            return EquipmentSlotGroup.FEET;
+        }
+        return null;
+    }
+
+    private static org.bukkit.inventory.EquipmentSlot legacySlotForArmor(Material material) {
+        if (material == null) {
+            return null;
+        }
+        String n = material.name();
+        if (n.endsWith("_HELMET")) {
+            return org.bukkit.inventory.EquipmentSlot.HEAD;
+        }
+        if (n.endsWith("_CHESTPLATE")) {
+            return org.bukkit.inventory.EquipmentSlot.CHEST;
+        }
+        if (n.endsWith("_LEGGINGS")) {
+            return org.bukkit.inventory.EquipmentSlot.LEGS;
+        }
+        if (n.endsWith("_BOOTS")) {
+            return org.bukkit.inventory.EquipmentSlot.FEET;
+        }
+        return null;
     }
 
     private boolean shouldVanish(GameItem def) {
@@ -373,101 +538,127 @@ public class ItemManager {
     /**
      * attack-damage: 覆盖主手攻击伤害为固定值（如 20）。
      * 使用 ADD_NUMBER 加到玩家基础 1 点上，故 amount = 目标伤害 - 1。
-     * 会清除主手原有 ATTACK_DAMAGE 修饰符，避免与材质默认叠算。
      */
     private void applyAttackDamage(ItemStack stack, GameItem def) {
         if (stack == null || def == null || def.getAttackDamage() <= 0) {
             return;
         }
-        double target = def.getAttackDamage();
+        applyMainHandAttribute(
+                stack, def,
+                resolveAttribute("ATTACK_DAMAGE", "GENERIC_ATTACK_DAMAGE",
+                        "attack_damage", "generic.attack_damage"),
+                def.getAttackDamage() - 1.0,
+                "dfs_atk"
+        );
+    }
+
+    /**
+     * attack-speed: 次/秒。原版玩家基础攻速 4.0。
+     * amount = 目标攻速 - 4；例：4 秒一刀 → 0.25/s → amount = -3.75。
+     */
+    private void applyAttackSpeed(ItemStack stack, GameItem def) {
+        if (stack == null || def == null || def.getAttackSpeed() <= 0) {
+            return;
+        }
+        double target = def.getAttackSpeed();
+        applyMainHandAttribute(
+                stack, def,
+                resolveAttribute("ATTACK_SPEED", "GENERIC_ATTACK_SPEED",
+                        "attack_speed", "generic.attack_speed"),
+                target - 4.0,
+                "dfs_spd"
+        );
+    }
+
+    private void applyMainHandAttribute(ItemStack stack, GameItem def,
+                                        Attribute attr, double amount, String namePrefix) {
+        if (attr == null) {
+            plugin.getLogger().warning("无法解析属性 " + namePrefix + " @ " + def.getId());
+            return;
+        }
         ItemMeta meta = stack.getItemMeta();
         if (meta == null) {
             return;
         }
-
-        Attribute attr = resolveAttackDamageAttribute();
-        if (attr == null) {
-            plugin.getLogger().warning("无法解析 ATTACK_DAMAGE 属性 @ " + def.getId());
-            return;
-        }
-
         try {
             meta.removeAttributeModifier(attr);
         } catch (Throwable ignored) {
         }
-
-        // 玩家空手基础伤害 1.0；最终 ≈ 1 + amount
-        double amount = target - 1.0;
-        NamespacedKey key = new NamespacedKey(plugin, "dfs_atk_" + safeKey(def.getId()));
-
-        AttributeModifier mod = null;
-        // Paper 1.21+：NamespacedKey + EquipmentSlotGroup
-        try {
-            mod = new AttributeModifier(
-                    key,
-                    amount,
-                    AttributeModifier.Operation.ADD_NUMBER,
-                    EquipmentSlotGroup.MAINHAND
-            );
-        } catch (Throwable t1) {
-            try {
-                // 旧 API：UUID + EquipmentSlot
-                mod = AttributeModifier.class
-                        .getConstructor(UUID.class, String.class, double.class,
-                                AttributeModifier.Operation.class,
-                                org.bukkit.inventory.EquipmentSlot.class)
-                        .newInstance(
-                                UUID.nameUUIDFromBytes(key.toString().getBytes()),
-                                "dfs_atk",
-                                amount,
-                                AttributeModifier.Operation.ADD_NUMBER,
-                                org.bukkit.inventory.EquipmentSlot.HAND
-                        );
-            } catch (Throwable t2) {
-                plugin.getLogger().warning("创建攻击伤害修饰符失败 @ " + def.getId()
-                        + ": " + t2.getMessage());
-                return;
-            }
+        NamespacedKey key = new NamespacedKey(plugin, namePrefix + "_" + safeKey(def.getId()));
+        AttributeModifier mod = createModifier(
+                key, namePrefix, amount,
+                EquipmentSlotGroup.MAINHAND, org.bukkit.inventory.EquipmentSlot.HAND
+        );
+        if (mod == null) {
+            plugin.getLogger().warning("创建修饰符失败 " + namePrefix + " @ " + def.getId());
+            return;
         }
-
         try {
             meta.addAttributeModifier(attr, mod);
-            // 显示属性行，方便确认
             try {
                 meta.removeItemFlags(ItemFlag.HIDE_ATTRIBUTES);
             } catch (Throwable ignored) {
             }
             stack.setItemMeta(meta);
         } catch (Throwable t) {
-            plugin.getLogger().warning("写入攻击伤害失败 @ " + def.getId() + ": " + t.getMessage());
+            plugin.getLogger().warning("写入属性失败 " + namePrefix + " @ " + def.getId()
+                    + ": " + t.getMessage());
         }
     }
 
-    private static Attribute resolveAttackDamageAttribute() {
-        // 现代 API（1.21+）
+    private AttributeModifier createModifier(NamespacedKey key, String legacyName,
+                                             double amount,
+                                             EquipmentSlotGroup group,
+                                             org.bukkit.inventory.EquipmentSlot legacySlot) {
         try {
-            return Attribute.ATTACK_DAMAGE;
+            return new AttributeModifier(
+                    key, amount, AttributeModifier.Operation.ADD_NUMBER, group
+            );
+        } catch (Throwable t1) {
+            try {
+                return AttributeModifier.class
+                        .getConstructor(UUID.class, String.class, double.class,
+                                AttributeModifier.Operation.class,
+                                org.bukkit.inventory.EquipmentSlot.class)
+                        .newInstance(
+                                UUID.nameUUIDFromBytes(key.toString().getBytes()),
+                                legacyName,
+                                amount,
+                                AttributeModifier.Operation.ADD_NUMBER,
+                                legacySlot
+                        );
+            } catch (Throwable t2) {
+                return null;
+            }
+        }
+    }
+
+    private static Attribute resolveAttribute(String modernField, String legacyField,
+                                              String modernKey, String legacyKey) {
+        try {
+            Object v = Attribute.class.getField(modernField).get(null);
+            if (v instanceof Attribute a) {
+                return a;
+            }
         } catch (Throwable ignored) {
         }
-        // Registry（无 valueOf 弃用警告）
         try {
             var reg = RegistryAccess.registryAccess()
                     .getRegistry(RegistryKey.ATTRIBUTE);
-            Attribute a = reg.get(NamespacedKey.minecraft("attack_damage"));
+            Attribute a = reg.get(NamespacedKey.minecraft(modernKey));
             if (a != null) {
                 return a;
             }
-            a = reg.get(NamespacedKey.minecraft("generic.attack_damage"));
+            a = reg.get(NamespacedKey.minecraft(legacyKey));
             if (a != null) {
                 return a;
             }
         } catch (Throwable ignored) {
         }
-        // 反射读旧常量，避免编译期 valueOf 弃用
         try {
-            Object v = Attribute.class.getField("GENERIC_ATTACK_DAMAGE").get(null);
-            if (v instanceof Attribute attr) {
-                return attr;
+            Object v = Attribute.class.getField(legacyField).get(null);
+            if (v instanceof Attribute a) {
+                return a;
             }
         } catch (Throwable ignored) {
         }

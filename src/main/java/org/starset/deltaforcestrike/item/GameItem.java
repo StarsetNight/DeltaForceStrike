@@ -23,6 +23,10 @@ public final class GameItem {
     private final int maxDurability;
     /** 攻击伤害覆盖；≤0 表示不覆盖（走材质+附魔） */
     private final double attackDamage;
+    /** 攻击速度（次/秒）；≤0 不覆盖。4 秒一刀 ≈ 0.25 */
+    private final double attackSpeed;
+    /** 护甲韧性（套装合计）；≤0 不附加 */
+    private final double armorToughness;
     private final Map<String, Integer> enchantments;
     private final Map<String, Material> armorPieces;
 
@@ -38,6 +42,8 @@ public final class GameItem {
         this.undroppable = b.undroppable;
         this.maxDurability = b.maxDurability;
         this.attackDamage = b.attackDamage;
+        this.attackSpeed = b.attackSpeed;
+        this.armorToughness = b.armorToughness;
         this.enchantments = Collections.unmodifiableMap(b.enchantments);
         this.armorPieces = Collections.unmodifiableMap(b.armorPieces);
     }
@@ -54,6 +60,8 @@ public final class GameItem {
         b.undroppable = section.getBoolean("undroppable", false);
         b.maxDurability = section.getInt("max-durability", 0);
         b.attackDamage = section.getDouble("attack-damage", 0);
+        b.attackSpeed = section.getDouble("attack-speed", 0);
+        b.armorToughness = section.getDouble("armor-toughness", 0);
 
         String mat = section.getString("material");
         if (mat != null && !mat.isEmpty()) {
@@ -97,6 +105,10 @@ public final class GameItem {
     public int getMaxDurability() { return maxDurability; }
     /** ≤0 = 不覆盖攻击伤害 */
     public double getAttackDamage() { return attackDamage; }
+    /** ≤0 = 不覆盖攻速；单位：次/秒 */
+    public double getAttackSpeed() { return attackSpeed; }
+    /** ≤0 = 不附加韧性 */
+    public double getArmorToughness() { return armorToughness; }
     public Map<String, Integer> getEnchantments() { return enchantments; }
     public Map<String, Material> getArmorPieces() { return armorPieces; }
 
@@ -117,6 +129,8 @@ public final class GameItem {
         boolean undroppable;
         int maxDurability;
         double attackDamage;
+        double attackSpeed;
+        double armorToughness;
         Map<String, Integer> enchantments = new HashMap<>();
         Map<String, Material> armorPieces = new HashMap<>();
     }

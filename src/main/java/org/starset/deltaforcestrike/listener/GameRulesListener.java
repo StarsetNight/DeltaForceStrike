@@ -7,6 +7,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
+import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -24,6 +25,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.projectiles.ProjectileSource;
 import org.starset.deltaforcestrike.DeltaForceStrike;
@@ -216,11 +218,18 @@ public class GameRulesListener implements Listener {
         event.setCancelled(true);
 
         Player killer = null;
+        boolean meleeKill = false;
         if (event instanceof EntityDamageByEntityEvent by) {
             killer = findKillerPlayer(by);
+            // 近战击杀：伤害被 cancel 后原版不扣耐久，需手动扣
+            meleeKill = by.getDamager() instanceof Player;
         }
 
         KillInfo killInfo = resolveKillInfo(event, killer);
+
+        if (meleeKill && killer != null) {
+            damageWeaponOnMeleeKill(killer);
+        }
 
         DeathDrops.dropAndClearLoadout(player);
         showDeathTitle(player, killInfo);
@@ -228,6 +237,61 @@ public class GameRulesListener implements Listener {
         enterSpectator(player);
 
         plugin.getMatchManager().onPlayerEliminated(player, killer);
+    }
+
+    /**
+     * 伪死亡 cancel 了致死伤害，近战武器不会掉耐久。
+     * 与原版斧击实体一致：模拟扣 2 点耐久（eco 金斧 max-durability:2 时击杀即碎）。
+     */
+    private void damageWeaponOnMeleeKill(Player killer) {
+        applyMeleeWeaponDurability(killer, 2);
+    }
+
+    /**
+     * 对主手近战武器施加 durability 点损伤；达到上限则打碎。
+     */
+    private void applyMeleeWeaponDurability(Player killer, int durabilityLoss) {
+        if (killer == null || !killer.isOnline() || durabilityLoss <= 0) {
+            return;
+        }
+        ItemStack hand = killer.getInventory().getItemInMainHand();
+        if (hand == null || hand.getType().isAir()) {
+            return;
+        }
+        if (hand.getType().getMaxDurability() <= 0) {
+            return;
+        }
+        ItemMeta meta = hand.getItemMeta();
+        if (!(meta instanceof Damageable damageable)) {
+            return;
+        }
+
+        int max;
+        try {
+            Object m = damageable.getClass().getMethod("getMaxDamage").invoke(damageable);
+            max = m instanceof Integer i ? i : hand.getType().getMaxDurability();
+            if (max <= 0) {
+                max = hand.getType().getMaxDurability();
+            }
+        } catch (Throwable t) {
+            max = hand.getType().getMaxDurability();
+        }
+        if (max <= 0) {
+            return;
+        }
+
+        int dmg = damageable.getDamage() + durabilityLoss;
+        if (dmg >= max) {
+            killer.getInventory().setItemInMainHand(null);
+            try {
+                killer.playSound(killer.getLocation(), Sound.ENTITY_ITEM_BREAK, 1f, 1f);
+            } catch (Throwable ignored) {
+            }
+            return;
+        }
+        damageable.setDamage(dmg);
+        hand.setItemMeta(meta);
+        killer.getInventory().setItemInMainHand(hand);
     }
 
     /** 对局内若仍触发原版死亡：压消息 */

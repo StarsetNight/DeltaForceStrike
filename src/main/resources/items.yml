@@ -27,9 +27,12 @@ items:
       material: GOLDEN_AXE
       price: 1400
       slot: melee
+      # 4 点耐久（每次有效攻击扣 2 → 约两刀）
       max-durability: 4
-      # 属性修饰符固定攻击伤害 25（不用锋利叠算，避免无效/不可控）
-      attack-damage: 25
+      # 属性固定攻击伤害 18
+      attack-damage: 18
+      # 攻击间隔 4 秒（攻速约 0.25/s；原版基础 4 → 修饰符 -3.75）
+      attack-speed: 0.25
 
     dominator:
       name: "§3主宰"
@@ -125,6 +128,8 @@ items:
       type: armor
       price: 1000
       kind: armor_set
+      # 整套合计 +4 盔甲韧性（胸甲承载）；每件会写回原版护甲值，避免被属性覆盖吞掉
+      armor-toughness: 4
       armor:
         helmet: IRON_HELMET
         chestplate: IRON_CHESTPLATE

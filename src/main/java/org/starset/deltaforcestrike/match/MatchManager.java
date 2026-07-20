@@ -85,7 +85,10 @@ public class MatchManager {
         if (!Worlds.isArena(player)) {
             return;
         }
-        tryJoin(player);
+        // 能进队列则进；否则（对局中/已满/结算）仍放到 queue 区，避免落在战场
+        if (!tryJoin(player)) {
+            parkAtQueue(player, true);
+        }
     }
 
     public boolean tryJoin(Player player) {
@@ -112,13 +115,13 @@ public class MatchManager {
         }
 
         if (isJoinLocked()) {
-            player.sendMessage("§c[DFS] 当前对局已锁定，无法加入。");
+            player.sendMessage("§c[DFS] 当前对局进行中，已将你传送至队列区等待。");
             return false;
         }
 
         int max = ConfigKeys.maxPlayers();
         if (match.isFull(max)) {
-            player.sendMessage("§c[DFS] 队列已满（" + max + "）。");
+            player.sendMessage("§c[DFS] 队列已满（" + max + "），已将你传送至队列区。");
             return false;
         }
 
@@ -160,7 +163,24 @@ public class MatchManager {
      * 进入队列：清空物品/状态，冒险模式，满血满食。
      */
     private void prepareQueuePlayer(Player player) {
-        if (player == null || !player.isOnline()) {
+        parkAtQueue(player, false);
+        // 仅真正入队时发选队书
+        TeamSelectUI.giveBook(player);
+        player.updateInventory();
+    }
+
+    /**
+     * 放到 queue 出生点并清状态，但不加入 Match session。
+     * 用于对局进行中/队列已满时新进维度的玩家。
+     *
+     * @param notify 是否已由调用方发过提示（避免重复）
+     */
+    public void parkAtQueue(Player player, boolean notify) {
+        if (player == null || !player.isOnline() || !Worlds.isArena(player)) {
+            return;
+        }
+        // 已在对局里的不要当旁观者清掉
+        if (match != null && match.contains(player.getUniqueId())) {
             return;
         }
         try {
@@ -199,13 +219,20 @@ public class MatchManager {
         }
 
         player.setGameMode(GameMode.ADVENTURE);
+        // 未入队旁观等待：可受伤关闭，避免乱入战场被打
         player.setInvulnerable(true);
         teleportQueue(player);
         plugin.getGameRulesService().fillFood(player);
         plugin.getGameRulesService().fillHealth(player);
-        // 选队书
-        TeamSelectUI.giveBook(player);
         player.updateInventory();
+
+        if (notify) {
+            // tryJoin 已发过具体原因时可不重复；此处作兜底
+            MatchState st = match == null ? null : match.getState();
+            if (st == MatchState.IN_PROGRESS || st == MatchState.AGENT_SELECT) {
+                player.sendMessage("§7[DFS] 请在队列区等待本局结束。");
+            }
+        }
     }
 
     /**

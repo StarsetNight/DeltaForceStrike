@@ -16,6 +16,7 @@ import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.item.ItemKeys;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.PlayerSession;
+import org.starset.deltaforcestrike.round.RoundState;
 import org.starset.deltaforcestrike.operator.skill.SkillContext;
 import org.starset.deltaforcestrike.operator.skill.SkillHandler;
 import org.starset.deltaforcestrike.operator.skill.SkillHandlerRegistry;
@@ -537,6 +538,17 @@ public class OperatorService {
         }
         if (kind == null || kind == SkillKind.PASSIVE) {
             return false;
+        }
+
+        // 仅战斗 / 拆弹阶段可释放技能（购买、结算、空闲禁止）
+        RoundState rs = match.getRoundManager().getState();
+        if (rs != RoundState.COMBAT && rs != RoundState.BOMB_PLANTED) {
+            if (rs == RoundState.BUY) {
+                player.sendMessage("§c购买阶段不能使用技能。");
+            } else {
+                player.sendMessage("§c当前阶段不能使用技能。");
+            }
+            return true;
         }
 
         long now = System.currentTimeMillis();
