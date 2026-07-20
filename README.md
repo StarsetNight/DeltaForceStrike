@@ -5,7 +5,7 @@
 基于 PaperMC 的 3v3/5v5 回合制战术竞技插件
 
 ![PaperMC](https://img.shields.io/badge/PaperMC-Plugin-green)
-![Java](https://img.shields.io/badge/Java-21%2B-orange)
+![Java](https://img.shields.io/badge/Java-25%2B-orange)
 ![Minecraft](https://img.shields.io/badge/Minecraft-26.2-blue)
 
 ---

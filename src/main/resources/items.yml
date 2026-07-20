@@ -57,10 +57,10 @@ items:
       name: "§f战弩"
       type: ranged
       material: CROSSBOW
-      price: 1200
+      price: 1400
       slot: ranged
       enchantments:
-        quick_charge: 3
+        quick_charge: 1
         piercing: 1
         unbreaking: 2
 
@@ -77,10 +77,10 @@ items:
       name: "§b连发弩"
       type: ranged
       material: CROSSBOW
-      price: 2400
+      price: 2900
       slot: ranged
       enchantments:
-        quick_charge: 4
+        quick_charge: 3
         multishot: 1
         unbreaking: 3
 
