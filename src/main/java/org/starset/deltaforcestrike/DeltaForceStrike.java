@@ -4,7 +4,9 @@ import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.starset.deltaforcestrike.bomb.BombDropGlowService;
 import org.starset.deltaforcestrike.bomb.BombManager;
+import org.starset.deltaforcestrike.bomb.BombSiteMarkerService;
 import org.starset.deltaforcestrike.command.DFSCommand;
 import org.starset.deltaforcestrike.game.GameRulesService;
 import org.starset.deltaforcestrike.grenade.GrenadeService;
@@ -18,6 +20,7 @@ import org.starset.deltaforcestrike.listener.GameRulesListener;
 import org.starset.deltaforcestrike.listener.GrenadeListener;
 import org.starset.deltaforcestrike.listener.InventoryLockListener;
 import org.starset.deltaforcestrike.listener.ItemProtectListener;
+import org.starset.deltaforcestrike.listener.OperatorSelectListener;
 import org.starset.deltaforcestrike.listener.OperatorSkillListener;
 import org.starset.deltaforcestrike.listener.PickupListener;
 import org.starset.deltaforcestrike.listener.SpectatorLockListener;
@@ -47,6 +50,8 @@ public final class DeltaForceStrike extends JavaPlugin {
     private TabListService tabListService;
     private NametagService nametagService;
     private BombManager bombManager;
+    private BombDropGlowService bombDropGlowService;
+    private BombSiteMarkerService bombSiteMarkerService;
     private GrenadeService grenadeService;
     private OperatorService operatorService;
     private SpectatorLockService spectatorLockService;
@@ -72,6 +77,8 @@ public final class DeltaForceStrike extends JavaPlugin {
         gameRulesService.applyToArenaWorld();
 
         bombManager = new BombManager(this);
+        bombDropGlowService = new BombDropGlowService(this);
+        bombSiteMarkerService = new BombSiteMarkerService(this);
         grenadeService = new GrenadeService(this);
         operatorService = new OperatorService(this);
 
@@ -103,9 +110,11 @@ public final class DeltaForceStrike extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new GameModeLockListener(this), this);
         getServer().getPluginManager().registerEvents(new BuyZoneListener(this), this);
         getServer().getPluginManager().registerEvents(new BombListener(this), this);
+        getServer().getPluginManager().registerEvents(bombDropGlowService, this);
         getServer().getPluginManager().registerEvents(new ShopListener(this), this);
         getServer().getPluginManager().registerEvents(new GrenadeListener(this, grenadeService), this);
         getServer().getPluginManager().registerEvents(new OperatorSkillListener(this), this);
+        getServer().getPluginManager().registerEvents(new OperatorSelectListener(this), this);
         getServer().getPluginManager().registerEvents(
                 new SpectatorLockListener(this, spectatorLockService), this);
 
@@ -135,6 +144,9 @@ public final class DeltaForceStrike extends JavaPlugin {
             }
         }, 2L, 2L);
 
+        bombDropGlowService.start();
+        bombSiteMarkerService.start();
+
         getLogger().info("DeltaForceStrike v" + getPluginMeta().getVersion() + " 已启动");
         getLogger().info("竞技世界: " + Worlds.arenaName()
                 + " | 物品: " + itemManager.getAll().size()
@@ -144,6 +156,12 @@ public final class DeltaForceStrike extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (bombDropGlowService != null) {
+            bombDropGlowService.stop();
+        }
+        if (bombSiteMarkerService != null) {
+            bombSiteMarkerService.stop();
+        }
         if (bombManager != null) {
             bombManager.reset();
         }
@@ -198,6 +216,14 @@ public final class DeltaForceStrike extends JavaPlugin {
 
     public BombManager getBombManager() {
         return bombManager;
+    }
+
+    public BombDropGlowService getBombDropGlowService() {
+        return bombDropGlowService;
+    }
+
+    public BombSiteMarkerService getBombSiteMarkerService() {
+        return bombSiteMarkerService;
     }
 
     public GrenadeService getGrenadeService() {

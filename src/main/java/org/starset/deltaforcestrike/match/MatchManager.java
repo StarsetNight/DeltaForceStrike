@@ -124,12 +124,7 @@ public class MatchManager {
         int startMoney = plugin.getConfig().getInt("economy.start-money", 800);
         match.getSessions().put(player.getUniqueId(), new PlayerSession(player, startMoney));
 
-        player.setGameMode(GameMode.ADVENTURE);
-        player.setFallDistance(0f);
-        player.setInvulnerable(true);
-        teleportQueue(player);
-        plugin.getGameRulesService().fillFood(player);
-        plugin.getGameRulesService().fillHealth(player);
+        prepareQueuePlayer(player);
 
         safeScoreboardCreate(player);
         safeTabUpdate(player);
@@ -157,6 +152,56 @@ public class MatchManager {
 
         checkAutoStart();
         return true;
+    }
+
+    /**
+     * 进入队列：清空物品/状态，冒险模式，满血满食。
+     */
+    private void prepareQueuePlayer(Player player) {
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+        try {
+            if (plugin.getSpectatorLockService() != null) {
+                plugin.getSpectatorLockService().clear(player);
+            }
+            player.setSpectatorTarget(null);
+        } catch (Throwable ignored) {
+        }
+        player.closeInventory();
+        player.getInventory().clear();
+        player.getInventory().setHelmet(null);
+        player.getInventory().setChestplate(null);
+        player.getInventory().setLeggings(null);
+        player.getInventory().setBoots(null);
+        player.getInventory().setItemInOffHand(null);
+        player.setItemOnCursor(null);
+        player.getInventory().setHeldItemSlot(0);
+
+        for (var pe : player.getActivePotionEffects()) {
+            player.removePotionEffect(pe.getType());
+        }
+        player.setFireTicks(0);
+        player.setFreezeTicks(0);
+        player.setFallDistance(0f);
+        player.setVelocity(new org.bukkit.util.Vector(0, 0, 0));
+        player.setFlying(false);
+        player.setAllowFlight(false);
+        player.setGliding(false);
+        player.setExp(0f);
+        player.setLevel(0);
+        player.setTotalExperience(0);
+        try {
+            player.setAbsorptionAmount(0);
+        } catch (Throwable ignored) {
+        }
+
+        player.setGameMode(GameMode.ADVENTURE);
+        player.setInvulnerable(true);
+        teleportQueue(player);
+        plugin.getGameRulesService().fillFood(player);
+        plugin.getGameRulesService().fillHealth(player);
+        player.updateInventory();
     }
 
     /**
@@ -617,7 +662,7 @@ public class MatchManager {
         var def = plugin.getOperatorService().getRegistry().get(operatorId);
         if (def != null) {
             OperatorSelectUI.sendSelected(player, def);
-            // 全队可见：谁选了什么
+            // 仅一行广播，不刷全员名单（避免挡点击）
             OperatorSelectUI.broadcastPick(match, player, def);
         }
 

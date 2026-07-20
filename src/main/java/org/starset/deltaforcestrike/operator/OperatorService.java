@@ -129,19 +129,27 @@ public class OperatorService {
             if (load.getDefinition() == null) {
                 continue;
             }
-            // 招牌 CD 重置、充能回满、购买技能清空
+            // 回合开始：先清上回合大招 Buff，再刷新招牌
+            clearUltimateBuffs(p);
             load.onRoundStart();
             applyPassive(p, load);
 
-            // 延迟 1 tick 写入，避免被 clear/sanitize 挤掉
             final Player fp = p;
             final OperatorLoadout fl = load;
+            // 连续 2 tick 写入，防止 clear/sanitize/商店关闭覆盖招牌
             plugin.getServer().getScheduler().runTask(plugin, () -> {
-                if (!fp.isOnline()) {
-                    return;
+                if (fp.isOnline()) {
+                    fl.refreshSignatureChargesFull();
+                    giveSkillHotbarItems(fp, fl);
                 }
-                giveSkillHotbarItems(fp, fl);
             });
+            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                if (fp.isOnline()) {
+                    fl.refreshSignatureChargesFull();
+                    writeSignatureSlot(fp, fl);
+                    writeUltimateSlot(fp, fl);
+                }
+            }, 2L);
         }
     }
 
@@ -149,13 +157,8 @@ public class OperatorService {
         if (match == null) {
             return;
         }
-        int perRound = 1;
-        try {
-            if (registry.getRaw() != null) {
-                perRound = registry.getRaw().getInt("settings.ultimate-points-per-round", 1);
-            }
-        } catch (Throwable ignored) {
-        }
+        int perRound = registry.getUltimatePointsPerRound();
+        int ultCap = registry.getUltimatePointsMax();
 
         for (Player p : match.onlinePlayers()) {
             OperatorLoadout load = getLoadout(p.getUniqueId());
@@ -163,16 +166,14 @@ public class OperatorService {
                 continue;
             }
 
-            // ★ 结束烟幕
-            load.onRoundEnd(); // 内含 clearRoundSmoke()
+            load.onRoundEnd();
 
-            load.addUltimatePoints(perRound);
-            if (load.isUltimateActiveThisRound()) {
-                clearUltimateBuffs(p);
-                load.setUltimateActiveThisRound(false);
-            }
+            // 回合结束强制清除大招 Buff（妮可狂暴等）
+            clearUltimateBuffs(p);
+            load.setUltimateActiveThisRound(false);
 
-            // 购买技能回合末作废
+            load.addUltimatePoints(perRound, ultCap);
+
             load.setPurchasableReady(false);
             load.setPurchasableUsesLeft(0);
             p.getInventory().setItem(InventorySlots.PURCHASABLE, null);
@@ -183,7 +184,31 @@ public class OperatorService {
             int cost = load.getDefinition().getUltimate() == null
                     ? 4 : load.getDefinition().getUltimate().getUltimateCost();
             p.sendMessage("§d[DFS] 回合结束，大招 §f+" + perRound
-                    + " §8(" + load.getUltimatePoints() + "/" + cost + ")");
+                    + " §8(" + load.getUltimatePoints() + "/" + Math.min(cost, ultCap) + ")");
+        }
+    }
+
+    /** 半场换边：大招充能清零 + 清 Buff */
+    public void onHalfTime(Match match) {
+        if (match == null) {
+            return;
+        }
+        for (Player p : match.onlinePlayers()) {
+            OperatorLoadout load = getLoadout(p.getUniqueId());
+            if (load == null) {
+                continue;
+            }
+            clearUltimateBuffs(p);
+            load.resetUltimatePoints();
+            writeUltimateSlot(p, load);
+            p.sendMessage("§6[DFS] 半场换边，大招充能已重置。");
+        }
+        // 断线占位也清
+        for (var e : loadouts.entrySet()) {
+            OperatorLoadout load = e.getValue();
+            if (load != null) {
+                load.resetUltimatePoints();
+            }
         }
     }
 
@@ -199,7 +224,7 @@ public class OperatorService {
         if (sig != null) {
             load.reduceSignatureCooldown(sig.getKillCooldownReduction());
         }
-        load.addUltimatePoints(registry.getUltimatePointsPerKill());
+        load.addUltimatePoints(registry.getUltimatePointsPerKill(), registry.getUltimatePointsMax());
         writeSignatureSlot(killer, load);
         writeUltimateSlot(killer, load);
     }
@@ -885,13 +910,21 @@ public class OperatorService {
                 || t.equals(PotionEffectType.INSTANT_DAMAGE);
     }
 
-    private void clearUltimateBuffs(Player p) {
+    /**
+     * 清除大招带来的临时增益（妮可狂暴等）。
+     * 随后 onRoundStart 会 applyPassive 续上被动。
+     */
+    public void clearUltimateBuffs(Player p) {
+        if (p == null || !p.isOnline()) {
+            return;
+        }
+        // 大招常见增益：力量/抗性/跳跃/速度(狂暴II)
         p.removePotionEffect(PotionEffectType.STRENGTH);
         p.removePotionEffect(PotionEffectType.RESISTANCE);
+        p.removePotionEffect(PotionEffectType.SPEED);
         try {
             p.removePotionEffect(PotionEffectType.JUMP_BOOST);
-        } catch (Throwable t) {
-            // 旧名兼容
+        } catch (Throwable ignored) {
         }
     }
 }

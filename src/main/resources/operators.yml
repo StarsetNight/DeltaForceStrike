@@ -7,6 +7,8 @@
 settings:
   ultimate-points-per-kill: 1
   ultimate-points-per-round: 1
+  # 大招充能上限（半场换边会清零）
+  ultimate-points-max: 4
 
 operators:
 
@@ -179,13 +181,13 @@ operators:
     signature:
       id: wulong_recon
       name: "深入腹地"
-      description: "侦查箭，半径 8 圆柱高亮敌人"
+      description: "侦查箭，半径 24 圆柱高亮敌人"
       handler: recon_arrow
       max-charges: 1
       initial-charges: 1
       recharge-seconds: 50
       kill-cooldown-reduction: 30
-      radius: 8.0
+      radius: 24.0
       glow-seconds: 3
 
     purchasable:

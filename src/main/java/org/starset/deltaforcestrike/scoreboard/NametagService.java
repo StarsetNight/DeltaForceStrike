@@ -144,10 +144,9 @@ public class NametagService {
         }
 
         team.setCanSeeFriendlyInvisibles(friendlyInvis);
-        team.setAllowFriendlyFire(true);
-        if (!friendlyInvis) {
-            team.setAllowFriendlyFire(false);
-        }
+        // 与 match.friendly-fire 配置一致（默认关友伤）
+        boolean ff = plugin.getConfig().getBoolean("match.friendly-fire", false);
+        team.setAllowFriendlyFire(ff);
     }
 
     private void addEntry(Team team, String entry) {

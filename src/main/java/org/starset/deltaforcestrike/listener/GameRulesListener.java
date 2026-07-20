@@ -96,9 +96,11 @@ public class GameRulesListener implements Listener {
         if (!plugin.getMatchManager().isInMatch(player)) {
             return;
         }
+        // 仅禁止自然回血（饱食）；允许药水再生（生命恩典 REGEN / MAGIC_REGEN）
         switch (event.getRegainReason()) {
-            case SATIATED, REGEN, MAGIC_REGEN -> event.setCancelled(true);
+            case SATIATED -> event.setCancelled(true);
             default -> {
+                // REGEN, MAGIC_REGEN, MAGIC, WITHER, CUSTOM 等放行
             }
         }
     }
@@ -118,6 +120,41 @@ public class GameRulesListener implements Listener {
     // ------------------------------------------------------------------
     // 致死处理
     // ------------------------------------------------------------------
+
+    /**
+     * 关闭友方伤害（match.friendly-fire=false 时）。
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onFriendlyFire(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof Player victim)) {
+            return;
+        }
+        if (!Worlds.isArena(victim) || !plugin.getMatchManager().isInMatch(victim)) {
+            return;
+        }
+        if (plugin.getConfig().getBoolean("match.friendly-fire", false)) {
+            return;
+        }
+        Player attacker = findKillerPlayer(event);
+        if (attacker == null || attacker.getUniqueId().equals(victim.getUniqueId())) {
+            return;
+        }
+        if (!plugin.getMatchManager().isInMatch(attacker)) {
+            return;
+        }
+        Match match = plugin.getMatchManager().getMatch();
+        if (match == null) {
+            return;
+        }
+        PlayerSession vs = match.getSession(victim.getUniqueId());
+        PlayerSession as = match.getSession(attacker.getUniqueId());
+        if (vs == null || as == null || !vs.hasTeam() || !as.hasTeam()) {
+            return;
+        }
+        if (vs.getTeam() == as.getTeam()) {
+            event.setCancelled(true);
+        }
+    }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onLethalDamage(EntityDamageEvent event) {

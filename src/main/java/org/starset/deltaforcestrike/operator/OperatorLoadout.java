@@ -63,22 +63,13 @@ public class OperatorLoadout {
      * 新回合：招牌回满清 CD；购买技能需重买；烟幕/信标清掉；大招点保留。
      */
     public void onRoundStart() {
-        if (definition != null && definition.getSignature() != null) {
-            signatureCharges = definition.getSignature().getMaxCharges();
-            if (signatureCharges <= 0) {
-                signatureCharges = Math.max(1, definition.getSignature().getInitialCharges());
-            }
-        } else {
-            signatureCharges = 0;
-        }
-        signatureReadyAtMs = 0;
-
+        refreshSignatureChargesFull();
         // 购买技能每回合作废，必须重新买充能
         purchasableReady = false;
         purchasableUsesLeft = 0;
 
         clearBeacon();
-        clearRoundSmoke(); // 上回合烟幕结束
+        clearRoundSmoke();
         ultimateActiveThisRound = false;
         silencedUntilMs = 0;
     }
@@ -87,6 +78,29 @@ public class OperatorLoadout {
         // 强效烟幕按 duration-seconds 到期，不在回合末强行掐断
         ultimateActiveThisRound = false;
         clearBeacon();
+    }
+
+    /** 招牌充能回满并清除 CD（每回合开始强制刷新） */
+    public void refreshSignatureChargesFull() {
+        if (definition != null && definition.getSignature() != null) {
+            int max = definition.getSignature().getMaxCharges();
+            int initial = definition.getSignature().getInitialCharges();
+            signatureCharges = max > 0 ? max : Math.max(1, initial);
+        } else {
+            signatureCharges = 0;
+        }
+        signatureReadyAtMs = 0;
+    }
+
+    /** 半场换边：大招充能清零 */
+    public void resetUltimatePoints() {
+        ultimatePoints = 0;
+        ultimateActiveThisRound = false;
+    }
+
+    public void addUltimatePoints(int n, int maxCap) {
+        int cap = maxCap > 0 ? maxCap : Integer.MAX_VALUE;
+        ultimatePoints = Math.max(0, Math.min(cap, ultimatePoints + n));
     }
 
     public boolean isSilenced() {
@@ -156,7 +170,7 @@ public class OperatorLoadout {
     }
 
     public void addUltimatePoints(int n) {
-        ultimatePoints = Math.max(0, ultimatePoints + n);
+        addUltimatePoints(n, 0);
     }
 
     public void clearBeacon() {

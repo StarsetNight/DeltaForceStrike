@@ -22,7 +22,7 @@ import java.util.Locale;
  */
 public final class ItemGiveService {
 
-    public static final int ARROWS_WITH_RANGED = 15;
+    public static final int ARROWS_WITH_RANGED = 25;
 
     private final ItemManager itemManager;
 

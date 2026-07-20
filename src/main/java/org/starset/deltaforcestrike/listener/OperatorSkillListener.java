@@ -196,7 +196,7 @@ public class OperatorSkillListener implements Listener {
         }
 
         double radius = arrow.getPersistentDataContainer()
-                .getOrDefault(OperatorKeys.reconRadius(), PersistentDataType.DOUBLE, 8.0);
+                .getOrDefault(OperatorKeys.reconRadius(), PersistentDataType.DOUBLE, 24.0);
         int glowSec = arrow.getPersistentDataContainer()
                 .getOrDefault(OperatorKeys.reconGlow(), PersistentDataType.INTEGER, 3);
 

@@ -39,7 +39,7 @@ public final class ConfigKeys {
     }
 
     public static int arrowsPerRanged() {
-        return Math.max(1, cfg().getInt("shop.arrows-per-ranged", 15));
+        return Math.max(1, cfg().getInt("shop.arrows-per-ranged", 25));
     }
 
     /**

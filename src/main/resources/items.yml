@@ -59,6 +59,10 @@ items:
       material: CROSSBOW
       price: 1200
       slot: ranged
+      enchantments:
+        quick_charge: 2
+        piercing: 1
+        unbreaking: 2
 
     assault-bow:
       name: "§b强袭弓"
@@ -75,6 +79,11 @@ items:
       material: CROSSBOW
       price: 2400
       slot: ranged
+      enchantments:
+        quick_charge: 3
+        multishot: 1
+        piercing: 1
+        unbreaking: 3
 
     hunting-bow:
       name: "§c猎杀弓"

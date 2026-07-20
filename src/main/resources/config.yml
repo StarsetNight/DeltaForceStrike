@@ -45,6 +45,8 @@ match:
   max-rounds: 8
   # 整局结束 Title 停留后再回队列
   end-title-delay-ticks: 70
+  # 友方伤害：false=关闭（可用 /dfs config friendly-fire true 运行时改）
+  friendly-fire: false
 
 # ---------- 经济 ----------
 economy:
@@ -109,6 +111,11 @@ bomb:
     late-threshold-seconds: 10
     late-min-interval-ticks: 2  # 最后约 10 次/秒
     late-max-radius: 200
+  # A/B 包点中心浮动文字
+  site-markers:
+    enabled: true
+    y-offset: 1.6
+    scale: 1.2
   sites:
     a:
       world: delta_force_strike
@@ -169,6 +176,10 @@ locations:
     z: 0.5
     yaw: 90
     pitch: 0
+
+# 商店 / 装备补充
+shop:
+  arrows-per-ranged: 25
 
 debug:
   enabled: false

@@ -13,13 +13,16 @@ public class NikoBerserkHandler implements SkillHandler {
     @Override
     public SkillResult execute(SkillContext ctx) {
         Player p = ctx.player();
+        // 仅本回合有效：回合结束 / 半场 / 下回合开始会 clearUltimateBuffs
         int duration = ctx.skill().getInt("duration-seconds", 0);
-        int ticks = duration <= 0 ? 20 * 60 * 10 : duration * 20; // 回合内：给很长，回合结束清
+        int ticks = duration <= 0 ? 20 * 120 : duration * 20; // 最长 2 分钟兜底
 
         for (PotionSpec spec : ctx.skill().getEffects()) {
+            if (spec == null || spec.type() == null) {
+                continue;
+            }
             p.addPotionEffect(new PotionEffect(spec.type(), ticks, spec.amplifier(), false, true, true));
         }
-        // 默认套装若 effects 空
         if (ctx.skill().getEffects().isEmpty()) {
             p.addPotionEffect(new PotionEffect(org.bukkit.potion.PotionEffectType.SPEED, ticks, 1));
             p.addPotionEffect(new PotionEffect(org.bukkit.potion.PotionEffectType.JUMP_BOOST, ticks, 0));

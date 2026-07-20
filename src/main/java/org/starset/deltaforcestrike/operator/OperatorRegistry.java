@@ -74,6 +74,11 @@ public final class OperatorRegistry {
         return raw == null ? 1 : raw.getInt("settings.ultimate-points-per-round", 1);
     }
 
+    /** 大招充能上限，默认 4 */
+    public int getUltimatePointsMax() {
+        return raw == null ? 4 : Math.max(1, raw.getInt("settings.ultimate-points-max", 4));
+    }
+
     public YamlConfiguration getRaw() {
         return raw;
     }

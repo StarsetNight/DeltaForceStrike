@@ -42,6 +42,8 @@ public class RoundManager {
     private BukkitTask task;
     private int secondsLeft;
     private boolean halfTimeSwapped = false;
+    /** 本购买阶段是否已播放局势 Title（剩 5 秒时一次） */
+    private boolean buySituationTitleShown;
 
     public RoundManager(DeltaForceStrike plugin, Match match) {
         this.plugin = plugin;
@@ -109,10 +111,17 @@ public class RoundManager {
             p.getInventory().setBoots(null);
             p.getInventory().setItemInOffHand(null);
             p.setGameMode(GameMode.ADVENTURE);
+            for (var pe : p.getActivePotionEffects()) {
+                p.removePotionEffect(pe.getType());
+            }
+        }
+
+        if (plugin.getOperatorService() != null) {
+            plugin.getOperatorService().onHalfTime(match);
         }
 
         broadcastLegacy("§6§l[DFS] 半场结束（" + halfRound + " 回合）！交换攻防！");
-        broadcastLegacy("§e金钱与装备已重置。§7 比分 §cT " + match.getScoreT()
+        broadcastLegacy("§e金钱、装备与大招充能已重置。§7 比分 §cT " + match.getScoreT()
                 + " §7- §b" + match.getScoreCT() + " CT");
         refreshUi();
     }
@@ -124,6 +133,7 @@ public class RoundManager {
 
         state = RoundState.BUY;
         secondsLeft = plugin.getConfig().getInt("round.prepare-time", 15);
+        buySituationTitleShown = false;
 
         broadcastLegacy("§e[DFS] 第 §f" + match.getCurrentRound()
                 + " §e回合 · 购买阶段 §f" + secondsLeft + "s");
@@ -215,12 +225,92 @@ public class RoundManager {
                 startCombatPhase();
                 return;
             }
+            if (secondsLeft == 5 && !buySituationTitleShown) {
+                buySituationTitleShown = true;
+                showBuyPhaseSituationTitles();
+            }
             if (secondsLeft <= 5) {
                 broadcastLegacy("§e购买阶段剩余 §c" + secondsLeft + "s");
             }
             refreshUi();
             secondsLeft--;
         }, 0L, 20L);
+    }
+
+    /**
+     * 购买阶段剩 5 秒：局势 Title。
+     * 优先级：决胜局 &gt; 赛点 &gt; 上半场最终局 &gt; 半场手枪局（攻/防视角）
+     */
+    private void showBuyPhaseSituationTitles() {
+        int winTarget = plugin.getConfig().getInt("match.win-target", 5);
+        int halfRound = plugin.getConfig().getInt("match.half-round", 4);
+        int round = match.getCurrentRound();
+        int scoreT = match.getScoreT();
+        int scoreCT = match.getScoreCT();
+
+        int needT = winTarget - scoreT;
+        int needCT = winTarget - scoreCT;
+
+        boolean decisive = (needT == 1 && needCT == 2) || (needCT == 1 && needT == 2);
+        boolean matchPoint = needT == 1 || needCT == 1;
+        boolean firstHalfFinal = !halfTimeSwapped && round == halfRound;
+        boolean firstHalfPistol = !halfTimeSwapped && round == 1;
+        boolean secondHalfPistol = halfTimeSwapped && round == halfRound + 1;
+
+        Title.Times times = Title.Times.times(
+                Duration.ofMillis(200), Duration.ofSeconds(3), Duration.ofMillis(400));
+        Component scoreSub = Component.text(
+                "比分 T " + scoreT + " - " + scoreCT + " CT  ·  回合 " + round,
+                NamedTextColor.GRAY);
+
+        for (Player p : match.onlinePlayers()) {
+            PlayerSession s = match.getSession(p.getUniqueId());
+            Component main;
+            Component sub = scoreSub;
+
+            if (decisive) {
+                main = Component.text("决胜局", NamedTextColor.GOLD, TextDecoration.BOLD);
+                sub = Component.text("一方胜出，抑或双方战平", NamedTextColor.YELLOW)
+                        .append(Component.text(" · ", NamedTextColor.DARK_GRAY))
+                        .append(scoreSub);
+            } else if (matchPoint) {
+                main = Component.text("赛点", NamedTextColor.RED, TextDecoration.BOLD);
+                if (needT == 1 && needCT == 1) {
+                    sub = Component.text("双方均差 1 分胜利", NamedTextColor.YELLOW)
+                            .append(Component.text(" · ", NamedTextColor.DARK_GRAY))
+                            .append(scoreSub);
+                    // 一般不会触发，因为如果配置正常，双方均差1分胜利应该是平局
+                } else if (needT == 1) {
+                    sub = Component.text("进攻方 T 再胜 1 分胜利", NamedTextColor.RED)
+                            .append(Component.text(" · ", NamedTextColor.DARK_GRAY))
+                            .append(scoreSub);
+                } else {
+                    sub = Component.text("防守方 CT 再胜 1 分胜利", NamedTextColor.AQUA)
+                            .append(Component.text(" · ", NamedTextColor.DARK_GRAY))
+                            .append(scoreSub);
+                }
+            } else if (firstHalfFinal) {
+                main = Component.text("上半场最终局", NamedTextColor.LIGHT_PURPLE, TextDecoration.BOLD);
+            } else if (firstHalfPistol || secondHalfPistol) {
+                String half = firstHalfPistol ? "上半场" : "下半场";
+                String role = "观战";
+                if (s != null) {
+                    if (s.getTeam() == Team.T) {
+                        role = "进攻方";
+                    } else if (s.getTeam() == Team.CT) {
+                        role = "防守方";
+                    }
+                }
+                main = Component.text(half, NamedTextColor.GOLD, TextDecoration.BOLD);
+                sub = Component.text("以" + role + "进行游戏", NamedTextColor.YELLOW)
+                        .append(Component.text(" · 手枪局", NamedTextColor.GRAY));
+            } else {
+                continue; // 无特殊局势，不弹 Title
+            }
+
+            p.showTitle(Title.title(main, sub, times));
+            p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.8f, 1.2f);
+        }
     }
 
     private void forceExitSpectator(Player p) {

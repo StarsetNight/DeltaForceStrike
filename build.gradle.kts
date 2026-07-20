@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "org.starset"
-version = "1.1.0"
+version = "1.1.1"
 
 repositories {
     mavenCentral()
@@ -16,7 +16,7 @@ dependencies {
 }
 
 java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(26))
+    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 }
 
 tasks {
@@ -36,6 +36,6 @@ tasks {
 
     compileJava {
         options.encoding = "UTF-8"
-        options.release.set(26)
+        options.release.set(25)
     }
 }

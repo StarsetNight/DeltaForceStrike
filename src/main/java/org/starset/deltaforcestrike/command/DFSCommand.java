@@ -39,7 +39,8 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             "cancel-if-not-full",
             "half-round",
             "win-target",
-            "max-rounds"
+            "max-rounds",
+            "friendly-fire"
     );
 
     public DFSCommand(DeltaForceStrike plugin) {
@@ -126,14 +127,8 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (args.length < 2) {
-            p.sendMessage("§c/dfs agent <niko|bruo|aier|wulong|妮可|布若|艾尔|骛龙>");
-            if (plugin.getOperatorService() != null) {
-                StringBuilder sb = new StringBuilder("§7可用: ");
-                for (OperatorDefinition d : plugin.getOperatorService().getRegistry().allUnique()) {
-                    sb.append(d.getId()).append("(").append(d.getDisplayName()).append(") ");
-                }
-                p.sendMessage(sb.toString());
-            }
+            // 打开干员选择 GUI
+            org.starset.deltaforcestrike.util.OperatorSelectUI.open(p);
             return;
         }
         plugin.getMatchManager().trySelectOperator(p, args[1]);
@@ -203,11 +198,15 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         if (plugin.getOperatorService() != null) {
             plugin.getOperatorService().reload();
         }
+        if (plugin.getBombSiteMarkerService() != null) {
+            plugin.getBombSiteMarkerService().respawnAll();
+        }
         sender.sendMessage("§a已重载配置/物品/干员。物品:"
                 + plugin.getItemManager().getAll().size()
                 + " 干员:"
                 + (plugin.getOperatorService() == null ? 0
-                : plugin.getOperatorService().getRegistry().allUnique().size()));
+                : plugin.getOperatorService().getRegistry().allUnique().size())
+                + " §7友伤:" + plugin.getConfig().getBoolean("match.friendly-fire", false));
     }
 
     /**
@@ -262,6 +261,7 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         }
         sender.sendMessage("§7例: §f/dfs config max-players 10");
         sender.sendMessage("§7例: §f/dfs config cancel-if-not-full false");
+        sender.sendMessage("§7例: §f/dfs config friendly-fire false");
     }
 
     private static String configPathOf(String key) {
@@ -272,13 +272,15 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             case "half-round", "halfround", "half" -> "match.half-round";
             case "win-target", "wintarget", "win" -> "match.win-target";
             case "max-rounds", "maxrounds", "rounds" -> "match.max-rounds";
+            case "friendly-fire", "friendlyfire", "ff" -> "match.friendly-fire";
             default -> null;
         };
     }
 
     private String formatConfigValue(String path, String key) {
         var cfg = plugin.getConfig();
-        if (key.contains("cancel") || path.endsWith("cancel-if-not-full")) {
+        if (key.contains("cancel") || key.contains("friendly") || path.contains("friendly-fire")
+                || path.endsWith("cancel-if-not-full")) {
             return String.valueOf(cfg.getBoolean(path));
         }
         return String.valueOf(cfg.getInt(path));
@@ -286,13 +288,16 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
 
     private boolean applyConfigValue(CommandSender sender, String key, String path, String raw) {
         var cfg = plugin.getConfig();
-        if (path.equals("queue.cancel-if-not-full")) {
+        if (path.equals("queue.cancel-if-not-full") || path.equals("match.friendly-fire")) {
             Boolean b = parseBoolean(raw);
             if (b == null) {
                 sender.sendMessage("§c取值须为 true/false（或 on/off、1/0）");
                 return false;
             }
             cfg.set(path, b);
+            if (path.equals("match.friendly-fire")) {
+                sender.sendMessage(b ? "§e友方伤害已 §a开启" : "§e友方伤害已 §c关闭");
+            }
             return true;
         }
 
@@ -432,6 +437,9 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         cfg.set(path + ".z", loc.getZ());
         cfg.set(path + ".radius", radius);
         plugin.saveConfig();
+        if (plugin.getBombSiteMarkerService() != null) {
+            plugin.getBombSiteMarkerService().respawnAll();
+        }
         p.sendMessage(String.format("§a包点 §e%s §ar=%.1f @ %.1f %.1f %.1f",
                 id, radius, loc.getX(), loc.getY(), loc.getZ()));
     }
@@ -496,7 +504,7 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         if (args.length == 3
                 && List.of("config", "cfg", "set").contains(args[0].toLowerCase(Locale.ROOT))) {
             String k = args[1].toLowerCase(Locale.ROOT).replace('_', '-');
-            if (k.contains("cancel")) {
+            if (k.contains("cancel") || k.contains("friendly") || k.equals("ff")) {
                 return filter(List.of("true", "false"), args[2]);
             }
             return filter(List.of("1", "2", "3", "4", "5", "6", "8", "10", "12", "16"), args[2]);

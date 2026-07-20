@@ -21,7 +21,7 @@ public class ReconArrowHandler implements SkillHandler {
                 OperatorKeys.reconArrow(), PersistentDataType.BYTE, (byte) 1);
         arrow.getPersistentDataContainer().set(
                 OperatorKeys.reconRadius(), PersistentDataType.DOUBLE,
-                ctx.skill().getDouble("radius", 8.0));
+                ctx.skill().getDouble("radius", 24.0));
         arrow.getPersistentDataContainer().set(
                 OperatorKeys.reconGlow(), PersistentDataType.INTEGER,
                 ctx.skill().getInt("glow-seconds", 3));
