@@ -10,6 +10,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.match.Match;
+import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
 import org.starset.deltaforcestrike.operator.OperatorDefinition;
@@ -100,6 +101,10 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         }
         if (!plugin.getMatchManager().isInMatch(p)) {
             p.sendMessage("§7不在队列中");
+            return;
+        }
+        if (plugin.getMatchManager().getMatch().getState() == MatchState.IN_PROGRESS) {
+            p.sendMessage("§7你不能在对局中离开游戏队列！");
             return;
         }
         plugin.getMatchManager().leave(p);

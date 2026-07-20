@@ -38,11 +38,11 @@ guide:
 # ---------- 比赛 ----------
 match:
   # 半场回合数：打完该回合后换边（T↔CT，比分对调）
-  half-round: 4
+  half-round: 12
   # 先到该胜场数获胜
-  win-target: 5
+  win-target: 13
   # 最多回合（含换边后）
-  max-rounds: 8
+  max-rounds: 24
   # 整局结束 Title 停留后再回队列
   end-title-delay-ticks: 70
   # 友方伤害：false=关闭（可用 /dfs config friendly-fire true 运行时改）
@@ -139,7 +139,7 @@ grenade:
   wither:
     duration-ticks: 120   # 6 秒
     radius: 3.0
-    amplifier: 0          # 0 = 凋零 I
+    amplifier: 1          # 0 = 凋零 I
   incendiary:
     radius: 4.5
     damage: 4.0           # 约 2 心，边缘衰减

@@ -60,7 +60,7 @@ items:
       price: 1200
       slot: ranged
       enchantments:
-        quick_charge: 2
+        quick_charge: 3
         piercing: 1
         unbreaking: 2
 
@@ -80,9 +80,8 @@ items:
       price: 2400
       slot: ranged
       enchantments:
-        quick_charge: 3
+        quick_charge: 4
         multishot: 1
-        piercing: 1
         unbreaking: 3
 
     hunting-bow:

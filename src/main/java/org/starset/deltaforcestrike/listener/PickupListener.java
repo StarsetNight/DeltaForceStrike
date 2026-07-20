@@ -7,6 +7,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.player.PlayerPickupArrowEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.persistence.PersistentDataType;
@@ -249,6 +250,50 @@ public class PickupListener implements Listener {
 
     private void runSanitize(Player player) {
         plugin.getServer().getScheduler().runTask(plugin, () -> lockListener.sanitizeAll(player));
+    }
+
+    /**
+     * 兜底：射击过的箭落到地上、玩家走进来拾取，触发 PlayerPickupArrowEvent
+     * （而非 EntityPickupItemEvent）。否则跳过对局内锁定和槽位规范。
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onPickupArrow(PlayerPickupArrowEvent event) {
+        Player player = event.getPlayer();
+        if (!shouldHandle(player)) {
+            return;
+        }
+
+        // 取消默认行为（直接进物品栏），按对局规则重新放置
+        event.setCancelled(true);
+
+        Item item = event.getItem();
+        ItemStack stack = item == null ? null : item.getItemStack();
+        if (isEmpty(stack)) {
+            if (item != null) {
+                item.remove();
+            }
+            // 同时移除埋地方块上的 Arrow 实体
+            try {
+                event.getArrow().remove();
+            } catch (Throwable ignored) {
+            }
+            return;
+        }
+
+        int moved = putArrowsInStorage(player, stack);
+        if (moved > 0) {
+            shrinkGround(item, stack, moved);
+            // 全部回收后清理 Arrow 实体，避免残留在地上
+            if (isEmpty(stack) || stack.getAmount() <= 0) {
+                try {
+                    event.getArrow().remove();
+                } catch (Throwable ignored) {
+                }
+            }
+        } else {
+            // 背包满了：保留箭体在地上，玩家可见；不交给 vanilla 处理
+        }
+        runSanitize(player);
     }
 
     private boolean tryGiveToFixedSlot(Player player, ItemManager items, ItemStack stack) {
