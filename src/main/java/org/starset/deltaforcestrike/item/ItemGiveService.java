@@ -22,7 +22,7 @@ import java.util.Locale;
  */
 public final class ItemGiveService {
 
-    public static final int ARROWS_WITH_RANGED = 25;
+    public static final int ARROWS_WITH_RANGED = 15;
 
     private final ItemManager itemManager;
 
@@ -86,13 +86,9 @@ public final class ItemGiveService {
             return giveToBombSlot(player, id, replaceWeapons);
         }
 
-        // 护甲
+        // 护甲：只允许升级，覆盖旧套；同级/降级拒绝
         if (def.isArmorSet()) {
-            boolean ok = itemManager.giveArmorSet(player, id);
-            if (ok && ConfigKeys.shieldEnabled() && isIronArmorId(id, def)) {
-                giveShieldToOffhand(player);
-            }
-            return ok;
+            return giveArmorUpgrade(player, id, def);
         }
 
         ItemStack stack = itemManager.createItem(id);
@@ -121,7 +117,7 @@ public final class ItemGiveService {
                 || "defuse".equals(action)
                 || "bomb".equals(slotHint)
                 || "defuse".equals(slotHint)) {
-            return putBombSlot(inv, stack, replaceWeapons);
+            return putBombSlot(player, inv, stack, replaceWeapons);
         }
 
         if (preferred == InventorySlots.UTIL_1
@@ -137,14 +133,10 @@ public final class ItemGiveService {
         }
 
         if (preferred >= 0 && preferred <= 5) {
-            // 仅允许 0-5，技能格 6-8 禁止普通物品
-            if (!replaceWeapons) {
-                ItemStack cur = inv.getItem(preferred);
-                if (cur != null && !cur.getType().isAir()) {
-                    return false;
-                }
+            // 槽位冲突：旧装备掉地上，再放入新装备
+            if (!placeOrDropConflict(player, inv, preferred, stack, replaceWeapons)) {
+                return false;
             }
-            inv.setItem(preferred, stack);
             if (isRangedWeapon(type, slotHint, stack.getType())) {
                 refillArrowsTo(player, ConfigKeys.arrowsPerRanged());
             }
@@ -154,24 +146,125 @@ public final class ItemGiveService {
         return false;
     }
 
+    /**
+     * 放入指定热键槽；若有旧物且允许替换 → 旧物掉落。
+     */
+    private boolean placeOrDropConflict(Player player, PlayerInventory inv,
+                                        int slot, ItemStack stack, boolean replaceWeapons) {
+        ItemStack cur = inv.getItem(slot);
+        boolean empty = cur == null || cur.getType().isAir() || cur.getAmount() <= 0;
+        if (!empty) {
+            if (!replaceWeapons) {
+                return false;
+            }
+            // 同 id 不重复给
+            String curId = itemManager.getItemId(cur);
+            String newId = itemManager.getItemId(stack);
+            if (curId != null && curId.equalsIgnoreCase(newId)) {
+                player.sendMessage("§7你已持有该物品。");
+                return false;
+            }
+            dropAtFeet(player, cur);
+            inv.setItem(slot, null);
+        }
+        inv.setItem(slot, stack);
+        return true;
+    }
+
+    private void dropAtFeet(Player player, ItemStack stack) {
+        if (player == null || stack == null || stack.getType().isAir()) {
+            return;
+        }
+        ItemStack drop = stack.clone();
+        player.getWorld().dropItemNaturally(player.getLocation(), drop);
+    }
+
     private boolean giveToBombSlot(Player player, String id, boolean replaceWeapons) {
         ItemStack stack = itemManager.createItem(id);
         if (stack == null) {
             return false;
         }
         stack.setAmount(1);
-        return putBombSlot(player.getInventory(), stack, replaceWeapons);
+        return putBombSlot(player, player.getInventory(), stack, replaceWeapons);
     }
 
-    private boolean putBombSlot(PlayerInventory inv, ItemStack stack, boolean replaceWeapons) {
-        if (!replaceWeapons) {
-            ItemStack cur = inv.getItem(InventorySlots.BOMB);
-            if (cur != null && !cur.getType().isAir()) {
-                return false;
+    private boolean putBombSlot(Player player, PlayerInventory inv, ItemStack stack, boolean replaceWeapons) {
+        return placeOrDropConflict(player, inv, InventorySlots.BOMB, stack, replaceWeapons);
+    }
+
+    /**
+     * 护甲：只能升级（轻→重），同级/降级拒绝；覆盖不掉落。
+     * tier: 0无 1轻(锁链) 2重(铁)
+     */
+    private boolean giveArmorUpgrade(Player player, String id, GameItem def) {
+        int newTier = armorTierOf(id, def);
+        int curTier = currentArmorTier(player);
+        if (newTier <= curTier) {
+            if (newTier == curTier && curTier > 0) {
+                player.sendMessage("§c你已拥有同级护甲，无法重复购买。");
+            } else if (newTier < curTier) {
+                player.sendMessage("§c不能购买更低级的护甲。");
+            } else {
+                player.sendMessage("§c无法购买该护甲。");
+            }
+            return false;
+        }
+        boolean ok = itemManager.giveArmorSet(player, id);
+        if (ok && ConfigKeys.shieldEnabled() && isIronArmorId(id, def)) {
+            giveShieldToOffhand(player);
+        }
+        if (ok) {
+            player.sendMessage("§a护甲已升级。");
+        }
+        return ok;
+    }
+
+    private int armorTierOf(String id, GameItem def) {
+        String check = ((id == null ? "" : id) + " " + (def == null ? "" : def.getId()))
+                .toLowerCase(Locale.ROOT);
+        if (check.contains("iron")) {
+            return 2;
+        }
+        if (check.contains("chain") || check.contains("leather") || check.contains("light")) {
+            return 1;
+        }
+        // 默认按价格粗分
+        if (def != null && def.getPrice() >= 900) {
+            return 2;
+        }
+        return 1;
+    }
+
+    private int currentArmorTier(Player player) {
+        ItemStack chest = player.getInventory().getChestplate();
+        if (chest == null || chest.getType().isAir()) {
+            // 看头盔/靴
+            ItemStack helm = player.getInventory().getHelmet();
+            if (helm == null || helm.getType().isAir()) {
+                return 0;
+            }
+            chest = helm;
+        }
+        Material m = chest.getType();
+        String n = m.name();
+        if (n.startsWith("IRON_") || n.startsWith("DIAMOND_") || n.startsWith("NETHERITE_")) {
+            return 2;
+        }
+        if (n.startsWith("CHAINMAIL_") || n.startsWith("LEATHER_") || n.startsWith("GOLDEN_")) {
+            return 1;
+        }
+        // 自定义 id
+        String id = itemManager.getItemId(chest);
+        if (id != null) {
+            String low = id.toLowerCase(Locale.ROOT);
+            if (low.contains("iron")) {
+                return 2;
+            }
+            if (low.contains("chain") || low.contains("leather")) {
+                return 1;
             }
         }
-        inv.setItem(InventorySlots.BOMB, stack);
-        return true;
+        return 1;
     }
 
     private boolean isDefuseKitDef(GameItem def, String id) {
@@ -297,27 +390,74 @@ public final class ItemGiveService {
     public int countArrows(Player player) {
         int n = 0;
         for (ItemStack stack : player.getInventory().getContents()) {
-            if (stack != null && stack.getType() == Material.ARROW) {
+            if (stack != null && isArrowMaterial(stack.getType())) {
                 n += stack.getAmount();
             }
         }
         return n;
     }
 
+    public static boolean isArrowMaterial(Material mat) {
+        return mat == Material.ARROW
+                || mat == Material.SPECTRAL_ARROW
+                || mat == Material.TIPPED_ARROW;
+    }
+
     public void refillArrowsTo(Player player, int targetTotal) {
-        int have = countArrows(player);
-        if (have >= targetTotal) {
+        if (player == null) {
             return;
         }
-        giveArrows(player, targetTotal - have);
+        int cap = Math.max(1, targetTotal);
+        int have = countArrows(player);
+        if (have >= cap) {
+            if (have > cap) {
+                trimArrowsTo(player, cap);
+            }
+            return;
+        }
+        giveArrows(player, cap - have);
+    }
+
+    /** 背包箭超过上限时裁剪（优先从后槽裁） */
+    public void trimArrowsTo(Player player, int max) {
+        if (player == null || max < 0) {
+            return;
+        }
+        int have = countArrows(player);
+        if (have <= max) {
+            return;
+        }
+        int needRemove = have - max;
+        PlayerInventory inv = player.getInventory();
+        for (int i = inv.getSize() - 1; i >= 0 && needRemove > 0; i--) {
+            ItemStack cur = inv.getItem(i);
+            if (cur == null || !isArrowMaterial(cur.getType())) {
+                continue;
+            }
+            int amt = cur.getAmount();
+            if (amt <= needRemove) {
+                inv.setItem(i, null);
+                needRemove -= amt;
+            } else {
+                cur.setAmount(amt - needRemove);
+                inv.setItem(i, cur);
+                needRemove = 0;
+            }
+        }
     }
 
     public void giveArrows(Player player, int amount) {
         if (player == null || amount <= 0) {
             return;
         }
+        int cap = ConfigKeys.arrowsPerRanged();
+        int have = countArrows(player);
+        int room = Math.max(0, cap - have);
+        int remain = Math.min(amount, room);
+        if (remain <= 0) {
+            return;
+        }
         PlayerInventory inv = player.getInventory();
-        int remain = amount;
 
         for (int i = 0; i < inv.getSize() && remain > 0; i++) {
             ItemStack cur = inv.getItem(i);
@@ -351,8 +491,6 @@ public final class ItemGiveService {
             inv.setItem(i, new ItemStack(Material.ARROW, put));
             remain -= put;
         }
-        if (remain > 0) {
-            player.getWorld().dropItemNaturally(player.getLocation(), new ItemStack(Material.ARROW, remain));
-        }
+        // 超上限部分不掉落刷箭
     }
 }

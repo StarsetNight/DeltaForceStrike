@@ -60,14 +60,11 @@ public class OperatorLoadout {
     }
 
     /**
-     * 新回合：招牌回满清 CD；购买技能需重买；烟幕/信标清掉；大招点保留。
+     * 新回合：招牌回满清 CD；购买技能若未使用则保留；烟幕/信标清掉；大招点保留。
      */
     public void onRoundStart() {
         refreshSignatureChargesFull();
-        // 购买技能每回合作废，必须重新买充能
-        purchasableReady = false;
-        purchasableUsesLeft = 0;
-
+        // 购买技能：仅使用后才清除（不在此强制作废）
         clearBeacon();
         clearRoundSmoke();
         ultimateActiveThisRound = false;
@@ -75,9 +72,15 @@ public class OperatorLoadout {
     }
 
     public void onRoundEnd() {
-        // 强效烟幕按 duration-seconds 到期，不在回合末强行掐断
+        // 强效烟幕按 duration-seconds 到期；购买技能跨回合保留直到使用
         ultimateActiveThisRound = false;
         clearBeacon();
+    }
+
+    /** 半场：购买技能也作废 */
+    public void clearPurchasableCharge() {
+        purchasableReady = false;
+        purchasableUsesLeft = 0;
     }
 
     /** 招牌充能回满并清除 CD（每回合开始强制刷新） */

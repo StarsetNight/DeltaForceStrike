@@ -4,6 +4,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
@@ -109,6 +110,34 @@ public class ShopListener implements Listener {
         if (event.getInventory().getHolder() instanceof ShopHolder) {
             event.setCancelled(true);
         }
+    }
+
+    /** 关闭商店后提示聊天栏按钮（购买成功 reopen 不算真正关闭） */
+    @EventHandler
+    public void onClose(InventoryCloseEvent event) {
+        if (!(event.getInventory().getHolder() instanceof ShopHolder)) {
+            return;
+        }
+        if (!(event.getPlayer() instanceof Player player)) {
+            return;
+        }
+        Match match = plugin.getMatchManager().getMatch();
+        if (match == null || match.getRoundManager().getState() != RoundState.BUY) {
+            return;
+        }
+        // 延迟 2 tick：若已因购买 reopen 则不再发按钮
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            if (!player.isOnline()) {
+                return;
+            }
+            if (player.getOpenInventory().getTopInventory().getHolder() instanceof ShopHolder) {
+                return;
+            }
+            if (match.getRoundManager().getState() != RoundState.BUY) {
+                return;
+            }
+            ShopGUI.sendChatButton(player);
+        }, 2L);
     }
 
     private static boolean isDefuseKit(GameItem gi, String itemId) {

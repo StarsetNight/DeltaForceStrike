@@ -355,19 +355,53 @@ public class ItemManager {
         for (Map.Entry<String, Integer> e : def.getEnchantments().entrySet()) {
             Enchantment enchant = resolveEnchantment(e.getKey());
             if (enchant != null) {
-                item.addUnsafeEnchantment(enchant, e.getValue());
+                // unsafe：允许快速装填 V、穿透 IV 等超限等级
+                item.addUnsafeEnchantment(enchant, Math.max(1, e.getValue()));
             } else {
-                plugin.getLogger().warning("未知附魔: " + e.getKey() + " @ " + def.getId());
+                plugin.getLogger().warning("未知附魔: " + e.getKey() + " @ " + def.getId()
+                        + "（请用 registry 名如 quick_charge / piercing / multishot）");
             }
         }
     }
 
     private Enchantment resolveEnchantment(String key) {
-        String k = key.toLowerCase(Locale.ROOT).trim();
-        NamespacedKey namespacedKey = NamespacedKey.minecraft(k);
-        return RegistryAccess.registryAccess()
-                .getRegistry(RegistryKey.ENCHANTMENT)
-                .get(namespacedKey);
+        if (key == null || key.isBlank()) {
+            return null;
+        }
+        String k = key.toLowerCase(Locale.ROOT).trim()
+                .replace("minecraft:", "")
+                .replace('-', '_')
+                .replace(' ', '_');
+        // 常见别名
+        k = switch (k) {
+            case "quickcharge", "quick_charge_i", "qc" -> "quick_charge";
+            case "multi_shot", "multi-shot" -> "multishot";
+            case "pierce" -> "piercing";
+            case "durability", "unbreak" -> "unbreaking";
+            case "vanishing", "curse_of_vanishing" -> "vanishing_curse";
+            default -> k;
+        };
+
+        try {
+            var reg = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT);
+            Enchantment e = reg.get(NamespacedKey.minecraft(k));
+            if (e != null) {
+                return e;
+            }
+            // 遍历兜底（部分构建 key 写法不同）
+            for (Enchantment ench : reg) {
+                if (ench == null) {
+                    continue;
+                }
+                NamespacedKey nk = ench.getKey();
+                if (nk != null && nk.getKey().equalsIgnoreCase(k)) {
+                    return ench;
+                }
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().warning("解析附魔失败 " + key + ": " + t.getMessage());
+        }
+        return null;
     }
 
     private static Component color(String input) {

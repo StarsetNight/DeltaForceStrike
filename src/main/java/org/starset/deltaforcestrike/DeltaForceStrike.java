@@ -115,6 +115,7 @@ public final class DeltaForceStrike extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new GrenadeListener(this, grenadeService), this);
         getServer().getPluginManager().registerEvents(new OperatorSkillListener(this), this);
         getServer().getPluginManager().registerEvents(new OperatorSelectListener(this), this);
+        getServer().getPluginManager().registerEvents(new org.starset.deltaforcestrike.listener.TeamSelectListener(this), this);
         getServer().getPluginManager().registerEvents(
                 new SpectatorLockListener(this, spectatorLockService), this);
 

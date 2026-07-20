@@ -17,6 +17,10 @@ public class ReconArrowHandler implements SkillHandler {
         AbstractArrow arrow = p.launchProjectile(org.bukkit.entity.Arrow.class);
         arrow.setShooter(p);
         arrow.setVelocity(p.getLocation().getDirection().multiply(2.2));
+        try {
+            arrow.setPickupStatus(AbstractArrow.PickupStatus.DISALLOWED);
+        } catch (Throwable ignored) {
+        }
         arrow.getPersistentDataContainer().set(
                 OperatorKeys.reconArrow(), PersistentDataType.BYTE, (byte) 1);
         arrow.getPersistentDataContainer().set(

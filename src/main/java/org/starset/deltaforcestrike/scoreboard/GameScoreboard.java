@@ -209,8 +209,8 @@ public final class GameScoreboard {
             case AGENT_SELECT -> "选干员";
             case IN_PROGRESS -> switch (rs) {
                 case BUY -> "购买阶段";
-                case COMBAT -> "战斗中";
-                case BOMB_PLANTED -> "拆弹中";
+                case COMBAT -> "进攻阶段";
+                case BOMB_PLANTED -> "炸弹已安放";
                 case ROUND_END -> "结算";
                 default -> "对局中";
             };

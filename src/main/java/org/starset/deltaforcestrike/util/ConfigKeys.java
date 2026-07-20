@@ -38,8 +38,9 @@ public final class ConfigKeys {
         return cfg().getBoolean("player.shield-enabled", false);
     }
 
+    /** 背包箭矢上限（发远程补满、拾取上限共用） */
     public static int arrowsPerRanged() {
-        return Math.max(1, cfg().getInt("shop.arrows-per-ranged", 25));
+        return Math.max(1, cfg().getInt("shop.arrows-per-ranged", 15));
     }
 
     /**

@@ -33,12 +33,15 @@ operators:
     signature:
       id: niko_dash
       name: "DASH！"
-      description: "末影珍珠；60 秒恢复，击杀 -30 秒"
-      handler: ender_pearl
+      description: "突进矛：前向短距离位移（难以上房）；60 秒恢复，击杀 -30 秒"
+      handler: dash
       max-charges: 1
       initial-charges: 1
       recharge-seconds: 60
       kill-cooldown-reduction: 30
+      power: 1.65          # 水平冲量
+      max-y: 0.28          # 竖直速度上限（防上房）
+      max-distance: 6.5    # 前方探测距离（撞墙减弱）
 
     purchasable:
       id: niko_teleporter

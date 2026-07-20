@@ -1,20 +1,24 @@
 package org.starset.deltaforcestrike.operator.skill.impl;
 
-import org.bukkit.entity.EnderPearl;
-import org.bukkit.entity.Player;
 import org.starset.deltaforcestrike.operator.skill.SkillContext;
 import org.starset.deltaforcestrike.operator.skill.SkillHandler;
 import org.starset.deltaforcestrike.operator.skill.SkillResult;
 
+/**
+ * 兼容旧配置 handler: ender_pearl。
+ * 实际改为可控水平突进（不再发射末影珍珠，防上房顶）。
+ */
 public class EnderPearlHandler implements SkillHandler {
-    @Override public String id() { return "ender_pearl"; }
+
+    private final DashHandler dash = new DashHandler();
+
+    @Override
+    public String id() {
+        return "ender_pearl";
+    }
 
     @Override
     public SkillResult execute(SkillContext ctx) {
-        Player p = ctx.player();
-        EnderPearl pearl = p.launchProjectile(EnderPearl.class);
-        pearl.setShooter(p);
-        pearl.setVelocity(p.getLocation().getDirection().multiply(1.5));
-        return SkillResult.ok("DASH！");
+        return dash.execute(ctx);
     }
 }

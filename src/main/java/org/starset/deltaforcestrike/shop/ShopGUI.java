@@ -1,7 +1,10 @@
 package org.starset.deltaforcestrike.shop;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -26,6 +29,45 @@ public final class ShopGUI {
     public static final Component TITLE = Component.text("DFS 商店", NamedTextColor.DARK_GRAY);
 
     private ShopGUI() {}
+
+    /** 聊天栏可点击再次打开商店 */
+    public static void sendChatButton(Player player) {
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+        Match match = DeltaForceStrike.getInstance().getMatchManager().getMatch();
+        if (match == null || match.getRoundManager().getState() != RoundState.BUY) {
+            return;
+        }
+        PlayerSession session = match.getSession(player.getUniqueId());
+        int money = session == null ? 0 : session.getMoney();
+
+        Component btn = Component.text("[ 打开商店 ]", NamedTextColor.GREEN, TextDecoration.BOLD)
+                .clickEvent(ClickEvent.runCommand("/dfs shop"))
+                .hoverEvent(HoverEvent.showText(Component.text(
+                        "点击打开购买界面\n当前资金 $" + money, NamedTextColor.YELLOW)));
+
+        player.sendMessage(Component.empty());
+        player.sendMessage(Component.text("──────── 购买阶段 ────────", NamedTextColor.GOLD));
+        player.sendMessage(Component.text("  资金 ", NamedTextColor.GRAY)
+                .append(Component.text("$" + money, NamedTextColor.YELLOW))
+                .append(Component.text("  "))
+                .append(btn));
+        player.sendMessage(Component.text("  关闭后可再次点击上方按钮", NamedTextColor.DARK_GRAY));
+        player.sendMessage(Component.text("────────────────────────", NamedTextColor.GOLD));
+    }
+
+    public static void broadcastChatButtons(org.starset.deltaforcestrike.match.Match match) {
+        if (match == null) {
+            return;
+        }
+        for (Player p : match.onlinePlayers()) {
+            PlayerSession s = match.getSession(p.getUniqueId());
+            if (s != null && s.hasTeam() && s.isAlive()) {
+                sendChatButton(p);
+            }
+        }
+    }
 
     public static void open(Player player) {
         DeltaForceStrike plugin = DeltaForceStrike.getInstance();

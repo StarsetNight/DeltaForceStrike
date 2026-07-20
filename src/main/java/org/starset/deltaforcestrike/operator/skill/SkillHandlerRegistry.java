@@ -10,7 +10,8 @@ public final class SkillHandlerRegistry {
     private final Map<String, SkillHandler> handlers = new HashMap<>();
 
     public SkillHandlerRegistry() {
-        register(new EnderPearlHandler());
+        register(new DashHandler());
+        register(new EnderPearlHandler()); // 兼容旧配置 handler: ender_pearl → 转发到 dash
         register(new EmergencyBeaconHandler());
         register(new NikoBerserkHandler());
         register(new SplashHarmingHandler());

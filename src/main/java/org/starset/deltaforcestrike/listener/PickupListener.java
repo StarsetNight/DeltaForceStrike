@@ -1,12 +1,16 @@
 package org.starset.deltaforcestrike.listener;
 
 import org.bukkit.Material;
+import org.bukkit.entity.AbstractArrow;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.entity.EntityShootBowEvent;
+import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.PlayerPickupArrowEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -62,10 +66,8 @@ public class PickupListener implements Listener {
         Item entity = event.getItem();
         ItemStack stack = entity.getItemStack();
 
-        // 箭 → 主背包
-        if (stack.getType() == Material.ARROW
-                || stack.getType() == Material.SPECTRAL_ARROW
-                || stack.getType() == Material.TIPPED_ARROW) {
+        // 地上箭物品（死亡/丢弃的 Item）：可捡，但背包总数 ≤ 上限
+        if (isArrowMaterial(stack.getType())) {
             event.setCancelled(true);
             int moved = putArrowsInStorage(player, stack);
             if (moved > 0) {
@@ -206,12 +208,27 @@ public class PickupListener implements Listener {
         return id != null && id.toLowerCase(Locale.ROOT).contains("defuse");
     }
 
+    private void runSanitize(Player player) {
+        plugin.getServer().getScheduler().runTask(plugin, () -> lockListener.sanitizeAll(player));
+    }
+
+    /**
+     * 拾取地上箭物品：只补到背包上限（默认 15），不碰射出的箭矢实体。
+     * @return 实际从地上拿走的数量
+     */
     private int putArrowsInStorage(Player player, ItemStack source) {
         if (source == null || source.getType().isAir()) {
             return 0;
         }
+        int cap = ConfigKeys.arrowsPerRanged();
+        int have = countPlayerArrows(player);
+        int room = Math.max(0, cap - have);
+        if (room <= 0) {
+            return 0;
+        }
+
         Material mat = source.getType();
-        int remain = source.getAmount();
+        int remain = Math.min(source.getAmount(), room);
         PlayerInventory inv = player.getInventory();
         int moved = 0;
 
@@ -248,13 +265,18 @@ public class PickupListener implements Listener {
         return moved;
     }
 
-    private void runSanitize(Player player) {
-        plugin.getServer().getScheduler().runTask(plugin, () -> lockListener.sanitizeAll(player));
+    private static int countPlayerArrows(Player player) {
+        int n = 0;
+        for (ItemStack stack : player.getInventory().getContents()) {
+            if (stack != null && isArrowMaterial(stack.getType())) {
+                n += stack.getAmount();
+            }
+        }
+        return n;
     }
 
     /**
-     * 兜底：射击过的箭落到地上、玩家走进来拾取，触发 PlayerPickupArrowEvent
-     * （而非 EntityPickupItemEvent）。否则跳过对局内锁定和槽位规范。
+     * 射出的箭矢（AbstractArrow）拾取：一律禁止，不进背包。
      */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onPickupArrow(PlayerPickupArrowEvent event) {
@@ -262,38 +284,60 @@ public class PickupListener implements Listener {
         if (!shouldHandle(player)) {
             return;
         }
-
-        // 取消默认行为（直接进物品栏），按对局规则重新放置
         event.setCancelled(true);
+        try {
+            AbstractArrow arrow = event.getArrow();
+            if (arrow != null) {
+                arrow.setPickupStatus(AbstractArrow.PickupStatus.DISALLOWED);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
 
-        Item item = event.getItem();
-        ItemStack stack = item == null ? null : item.getItemStack();
-        if (isEmpty(stack)) {
-            if (item != null) {
-                item.remove();
-            }
-            // 同时移除埋地方块上的 Arrow 实体
-            try {
-                event.getArrow().remove();
-            } catch (Throwable ignored) {
-            }
+    /** 弓/弩射出：标记箭矢不可拾取 */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onShootBow(EntityShootBowEvent event) {
+        if (!(event.getEntity() instanceof Player player)) {
             return;
         }
-
-        int moved = putArrowsInStorage(player, stack);
-        if (moved > 0) {
-            shrinkGround(item, stack, moved);
-            // 全部回收后清理 Arrow 实体，避免残留在地上
-            if (isEmpty(stack) || stack.getAmount() <= 0) {
-                try {
-                    event.getArrow().remove();
-                } catch (Throwable ignored) {
-                }
-            }
-        } else {
-            // 背包满了：保留箭体在地上，玩家可见；不交给 vanilla 处理
+        if (!shouldHandle(player)) {
+            return;
         }
-        runSanitize(player);
+        if (event.getProjectile() instanceof AbstractArrow arrow) {
+            disallowArrowPickup(arrow);
+        }
+    }
+
+    /** 任意箭类弹射物（含技能 launchProjectile） */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onProjectileLaunch(ProjectileLaunchEvent event) {
+        Projectile proj = event.getEntity();
+        if (!(proj instanceof AbstractArrow arrow)) {
+            return;
+        }
+        if (!(arrow.getShooter() instanceof Player player)) {
+            return;
+        }
+        if (!shouldHandle(player)) {
+            return;
+        }
+        disallowArrowPickup(arrow);
+    }
+
+    private static void disallowArrowPickup(AbstractArrow arrow) {
+        if (arrow == null) {
+            return;
+        }
+        try {
+            arrow.setPickupStatus(AbstractArrow.PickupStatus.DISALLOWED);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static boolean isArrowMaterial(Material mat) {
+        return mat == Material.ARROW
+                || mat == Material.SPECTRAL_ARROW
+                || mat == Material.TIPPED_ARROW;
     }
 
     private boolean tryGiveToFixedSlot(Player player, ItemManager items, ItemStack stack) {

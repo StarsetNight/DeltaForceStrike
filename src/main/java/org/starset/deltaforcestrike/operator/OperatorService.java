@@ -136,7 +136,7 @@ public class OperatorService {
 
             final Player fp = p;
             final OperatorLoadout fl = load;
-            // 连续 2 tick 写入，防止 clear/sanitize/商店关闭覆盖招牌
+            // 连续写入：招牌回满；购买技能若仍 ready 则保留第 8 格
             plugin.getServer().getScheduler().runTask(plugin, () -> {
                 if (fp.isOnline()) {
                     fl.refreshSignatureChargesFull();
@@ -147,6 +147,7 @@ public class OperatorService {
                 if (fp.isOnline()) {
                     fl.refreshSignatureChargesFull();
                     writeSignatureSlot(fp, fl);
+                    writePurchasableSlot(fp, fl);
                     writeUltimateSlot(fp, fl);
                 }
             }, 2L);
@@ -174,10 +175,8 @@ public class OperatorService {
 
             load.addUltimatePoints(perRound, ultCap);
 
-            load.setPurchasableReady(false);
-            load.setPurchasableUsesLeft(0);
-            p.getInventory().setItem(InventorySlots.PURCHASABLE, null);
-
+            // 购买技能跨回合保留，直到释放消耗；仅刷新槽位显示
+            writePurchasableSlot(p, load);
             writeUltimateSlot(p, load);
             writeSignatureSlot(p, load);
 
@@ -200,14 +199,18 @@ public class OperatorService {
             }
             clearUltimateBuffs(p);
             load.resetUltimatePoints();
+            load.clearPurchasableCharge();
+            p.getInventory().setItem(InventorySlots.PURCHASABLE, null);
             writeUltimateSlot(p, load);
-            p.sendMessage("§6[DFS] 半场换边，大招充能已重置。");
+            writePurchasableSlot(p, load);
+            p.sendMessage("§6[DFS] 半场换边，大招充能与购买技能已重置。");
         }
         // 断线占位也清
         for (var e : loadouts.entrySet()) {
             OperatorLoadout load = e.getValue();
             if (load != null) {
                 load.resetUltimatePoints();
+                load.clearPurchasableCharge();
             }
         }
     }
@@ -343,6 +346,11 @@ public class OperatorService {
             player.sendMessage("§c技能已被禁用。");
             return false;
         }
+        // 已持有未用完的购买技能：禁止重复买
+        if (load.isPurchasableReady() && load.getPurchasableUsesLeft() > 0) {
+            player.sendMessage("§c你已持有购买技能，使用后再购买。");
+            return false;
+        }
 
         SkillDefinition purch = load.getDefinition().getPurchasable();
         load.setPurchasableReady(true);
@@ -455,7 +463,14 @@ public class OperatorService {
             case SIGNATURE -> switch (h) {
                 case "splash_harming", "splash_regen" -> Material.SPLASH_POTION;
                 case "recon_arrow" -> Material.SPECTRAL_ARROW;
-                default -> Material.ENDER_PEARL;
+                case "dash", "ender_pearl" -> {
+                    Material spear = Material.matchMaterial("DIAMOND_SPEAR");
+                    if (spear == null) {
+                        spear = Material.matchMaterial("TRIDENT");
+                    }
+                    yield spear != null ? spear : Material.DIAMOND_SWORD;
+                }
+                default -> Material.DIAMOND_SWORD;
             };
             case PURCHASABLE -> switch (h) {
                 case "lingering_slowness" -> Material.LINGERING_POTION;

@@ -10,6 +10,7 @@ import org.bukkit.Location;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.round.RoundState;
@@ -143,9 +144,10 @@ public class MatchManager {
             MatchState st = match.getState();
             if (st == MatchState.WAITING || st == MatchState.COUNTDOWN) {
                 GameGuide.sendOnJoin(player);
-                TeamSelectUI.send(player);
+                TeamSelectUI.giveBook(player);
+                player.sendMessage("§e[DFS] 右键 §6选择队伍 §e书打开选边界面");
                 if (plugin.getConfig().getBoolean("operator.select-enabled", false)) {
-                    player.sendMessage("§d干员: §f/dfs agent <niko|bruo|aier|wulong>");
+                    player.sendMessage("§d干员: §f/dfs agent §7或选人阶段打开界面");
                 }
             }
         }, 10L);
@@ -201,6 +203,8 @@ public class MatchManager {
         teleportQueue(player);
         plugin.getGameRulesService().fillFood(player);
         plugin.getGameRulesService().fillHealth(player);
+        // 选队书
+        TeamSelectUI.giveBook(player);
         player.updateInventory();
     }
 
@@ -707,11 +711,12 @@ public class MatchManager {
         if (self.getTeam() == team) {
             player.sendMessage("§7你已在该队伍。");
             TeamSelectUI.sendSelected(player, team);
+            TeamSelectUI.refreshOpenGuis(match);
             return true;
         }
         if (match.countTeam(team) >= teamSize) {
             player.sendMessage("§c[DFS] 该队伍已满（" + teamSize + "）。");
-            TeamSelectUI.send(player);
+            TeamSelectUI.refreshOpenGuis(match);
             return false;
         }
 
@@ -721,12 +726,7 @@ public class MatchManager {
                 + (team == Team.T ? "§cT" : "§bCT")
                 + " §8(T " + match.countTeam(Team.T) + " / CT " + match.countTeam(Team.CT) + ")");
 
-        for (Player p : match.onlinePlayers()) {
-            PlayerSession s = match.getSession(p.getUniqueId());
-            if (s != null && !s.hasTeam()) {
-                TeamSelectUI.send(p);
-            }
-        }
+        TeamSelectUI.refreshOpenGuis(match);
         sendQueueActionBar();
         safeScoreboardUpdateAll();
         safeTabUpdateAll();
@@ -804,6 +804,8 @@ public class MatchManager {
             p.setInvulnerable(false);
             p.setFallDistance(0f);
             safeSpectatorClear(p);
+            // 清掉选队书，避免占热键第 1 格导致近战剑放不进
+            clearTeamSelectBook(p);
         }
 
         safeScoreboardUpdateAll();
@@ -952,6 +954,28 @@ public class MatchManager {
         safeScoreboardUpdateAll();
         safeTabUpdateAll();
         match.getRoundManager().checkWipe();
+    }
+
+    /** 移除选队书（对局开始 / 清栏时） */
+    public void clearTeamSelectBook(Player player) {
+        if (player == null) {
+            return;
+        }
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getSize(); i++) {
+            ItemStack st = inv.getItem(i);
+            if (TeamSelectUI.isTeamSelectBook(st)) {
+                inv.setItem(i, null);
+            }
+        }
+        ItemStack off = inv.getItemInOffHand();
+        if (TeamSelectUI.isTeamSelectBook(off)) {
+            inv.setItemInOffHand(null);
+        }
+        ItemStack cursor = player.getItemOnCursor();
+        if (TeamSelectUI.isTeamSelectBook(cursor)) {
+            player.setItemOnCursor(null);
+        }
     }
 
     public void teleportQueue(Player player) {

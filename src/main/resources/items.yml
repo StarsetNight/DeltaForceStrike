@@ -54,13 +54,14 @@ items:
       slot: ranged
 
     battle-crossbow:
-      name: "§f战弩"
+      name: "§f霰弹战弩"
       type: ranged
       material: CROSSBOW
       price: 1400
       slot: ranged
       enchantments:
         quick_charge: 1
+        multishot: 1
         piercing: 1
         unbreaking: 2
 
@@ -81,7 +82,7 @@ items:
       slot: ranged
       enchantments:
         quick_charge: 3
-        multishot: 1
+        piercing: 3
         unbreaking: 3
 
     hunting-bow:
@@ -91,7 +92,7 @@ items:
       price: 4700
       slot: ranged
       enchantments:
-        power: 5
+        power: 6
 
   equipments:
 

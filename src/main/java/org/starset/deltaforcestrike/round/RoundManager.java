@@ -160,13 +160,15 @@ public class RoundManager {
             plugin.getMatchManager().teleportTeamSpawn(p, s.getTeam());
 
             clearPlantBombOnly(p, items);
+            // 清残留选队书
+            plugin.getMatchManager().clearTeamSelectBook(p);
             ensureBaselineLoadoutNoBomb(p, s, give, items);
             p.sendMessage("§6资金: §e$" + s.getMoney() + " §7| §a/dfs shop");
         }
 
         assignBombCarrier(give, items);
 
-        // ★ 最后发技能：7 招牌 / 8 购买(空) / 9 大招
+        // 最后发技能：7 招牌回满 / 8 购买技能(未用则保留) / 9 大招
         if (plugin.getOperatorService() != null
                 && plugin.getConfig().getBoolean("operator.enabled", true)) {
             plugin.getOperatorService().onRoundStart(match);
@@ -206,6 +208,8 @@ public class RoundManager {
                     ShopGUI.open(p);
                 }
             }
+            // 聊天栏可点击再次打开商店
+            ShopGUI.broadcastChatButtons(match);
         }, 5L);
 
         task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
