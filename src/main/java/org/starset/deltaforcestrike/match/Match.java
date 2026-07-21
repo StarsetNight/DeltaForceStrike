@@ -22,6 +22,8 @@ public class Match {
     private int scoreT;
     private int scoreCT;
     private int currentRound;
+    /** 上一回合胜方（T/CT），供 ClientUI 音乐等使用 */
+    private Team lastRoundWinner = Team.NONE;
 
     public Match(DeltaForceStrike plugin) {
         this.roundManager = new RoundManager(plugin, this);
@@ -37,10 +39,17 @@ public class Match {
     public int getScoreCT() { return scoreCT; }
     public int getCurrentRound() { return currentRound; }
     public void setCurrentRound(int currentRound) { this.currentRound = currentRound; }
+    public Team getLastRoundWinner() { return lastRoundWinner; }
+    public void setLastRoundWinner(Team lastRoundWinner) {
+        this.lastRoundWinner = lastRoundWinner == null ? Team.NONE : lastRoundWinner;
+    }
 
     public void addScore(Team team) {
         if (team == Team.T) scoreT++;
         else if (team == Team.CT) scoreCT++;
+        if (team == Team.T || team == Team.CT) {
+            lastRoundWinner = team;
+        }
     }
 
     public void swapScores() {

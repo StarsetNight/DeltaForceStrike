@@ -57,6 +57,52 @@ public class BombManager {
     private final Map<UUID, BukkitTask> channelTasks = new HashMap<>();
     private final Map<UUID, BossBar> channelBars = new HashMap<>();
 
+    /** 当前下包/拆包读条信息（单任务，因为同时间只有一个） */
+    private UUID channelId;
+    private String channelType; // "PLANT" | "DEFUSE"
+    private String channelPlayerName;
+    private int channelTotalTicks;
+    private int channelElapsedTicks;
+
+    public final class BombInfo {
+        public final boolean channelActive;
+        public final String channelType;   // PLANT / DEFUSE / 空
+        public final String channelPlayer;
+        /** 读条已进行 tick（服务端），供客户端校准起点 */
+        public final int channelElapsedTicks;
+        /** 读条总 tick */
+        public final int channelTotalTicks;
+        public final boolean planted;
+        public final int fuseLeft;
+        public final String planterName;
+
+        private BombInfo(boolean channelActive, String channelType,
+                         String channelPlayer, int channelElapsedTicks, int channelTotalTicks,
+                         boolean planted, int fuseLeft, String planterName) {
+            this.channelActive = channelActive;
+            this.channelType = channelType;
+            this.channelPlayer = channelPlayer;
+            this.channelElapsedTicks = channelElapsedTicks;
+            this.channelTotalTicks = channelTotalTicks;
+            this.planted = planted;
+            this.fuseLeft = fuseLeft;
+            this.planterName = planterName;
+        }
+    }
+
+    /** 用于 ClientUI 协议的当前下包/拆包状态视图 */
+    public BombInfo info() {
+        boolean chActive = channelId != null && channelTasks.containsKey(channelId);
+        String chType = chActive ? channelType : "";
+        String chName = chActive && channelPlayerName != null ? channelPlayerName : "";
+        int elapsed = chActive ? Math.max(0, channelElapsedTicks) : 0;
+        int total = chActive ? Math.max(0, channelTotalTicks) : 0;
+        return new BombInfo(chActive, chType, chName, elapsed, total, planted,
+                planted ? Math.max(0, fuseLeft) : -1, lastPlanterName);
+    }
+
+    private String lastPlanterName = "";
+
     public BombManager(DeltaForceStrike plugin) {
         this.plugin = plugin;
     }
@@ -84,6 +130,7 @@ public class BombManager {
         planted = false;
         plantLocation = null;
         fuseLeft = -1;
+        lastPlanterName = "";
     }
 
     // =====================================================================
@@ -121,6 +168,7 @@ public class BombManager {
 
         startChannel(player, plantTime,
                 Component.text("安装改造TNT…", NamedTextColor.RED),
+                "PLANT",
                 () -> {
                     if (cannotPlant(player, plugin.getMatchManager().getMatch()) || planted) {
                         return;
@@ -156,6 +204,7 @@ public class BombManager {
         planted = true;
         plantLocation = loc.clone();
         fuseLeft = plugin.getConfig().getInt("bomb.explosion-time", 40);
+        lastPlanterName = player.getName();
 
         // 实体仅展示；逻辑 explode 为准。引信略长，避免原版先炸
         primed = loc.getWorld().spawn(loc, TNTPrimed.class, tnt -> {
@@ -506,6 +555,7 @@ public class BombManager {
 
         startChannel(player, time,
                 Component.text(kit ? "拆除中（拆除钳）…" : "拆除中（空手）…", NamedTextColor.GREEN),
+                "DEFUSE",
                 () -> {
                     if (!planted || cannotDefuse(player, plugin.getMatchManager().getMatch())) {
                         return;
@@ -560,6 +610,11 @@ public class BombManager {
     // =====================================================================
 
     private void startChannel(Player player, int seconds, Component barName, Runnable onDone) {
+        startChannel(player, seconds, barName, null, onDone);
+    }
+
+    private void startChannel(Player player, int seconds, Component barName,
+                              String type, Runnable onDone) {
         cancelChannel(player);
         BossBar bar = BossBar.bossBar(barName, 1f, BossBar.Color.RED, BossBar.Overlay.PROGRESS);
         player.showBossBar(bar);
@@ -568,6 +623,12 @@ public class BombManager {
         Location start = player.getLocation().clone();
         int total = Math.max(1, seconds) * 20;
         final int[] tick = {0};
+
+        channelId = player.getUniqueId();
+        channelType = type;
+        channelPlayerName = player.getName();
+        channelTotalTicks = total;
+        channelElapsedTicks = 0;
 
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (!player.isOnline()) {
@@ -580,6 +641,7 @@ public class BombManager {
                 return;
             }
             tick[0]++;
+            channelElapsedTicks = tick[0];
             bar.progress(Math.max(0f, 1f - (float) tick[0] / total));
             if (tick[0] >= total) {
                 cancelChannel(player);
@@ -597,7 +659,17 @@ public class BombManager {
         }
         BossBar bar = channelBars.remove(id);
         if (bar != null) {
-            player.hideBossBar(bar);
+            try {
+                player.hideBossBar(bar);
+            } catch (Exception ignored) {
+            }
+        }
+        if (id.equals(channelId)) {
+            channelId = null;
+            channelType = null;
+            channelPlayerName = null;
+            channelTotalTicks = 0;
+            channelElapsedTicks = 0;
         }
     }
 

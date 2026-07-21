@@ -58,6 +58,10 @@ public class RoundManager {
         return secondsLeft;
     }
 
+    public boolean isHalfTimeSwapped() {
+        return halfTimeSwapped;
+    }
+
     public void startNextRound() {
         int winTarget = plugin.getConfig().getInt("match.win-target", 5);
         int maxRounds = plugin.getConfig().getInt("match.max-rounds", 8);
@@ -562,7 +566,7 @@ public class RoundManager {
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             ArenaCleanup.clearDrops();
             startNextRound();
-        }, 5 * 20L);
+        }, 8 * 20L);
     }
 
     private void showRoundResultTitles(Team winner, String reason) {
@@ -588,10 +592,9 @@ public class RoundManager {
             }
             if (s.getTeam() == winner) {
                 p.showTitle(Title.title(winMain, subtitle, times));
-                p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 0.7f, 1.2f);
+                // 胜负音效改由 ClientUI 音乐盒播放，避免与自定义曲冲突
             } else {
                 p.showTitle(Title.title(loseMain, subtitle, times));
-                p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8f, 0.8f);
             }
         }
     }
@@ -666,6 +669,9 @@ public class RoundManager {
         }
         if (plugin.getTabListService() != null) {
             plugin.getTabListService().updateAll(match);
+        }
+        if (plugin.getHudSyncService() != null) {
+            plugin.getHudSyncService().tick();
         }
     }
 

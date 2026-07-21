@@ -10,6 +10,7 @@ import org.starset.deltaforcestrike.bomb.BombSiteMarkerService;
 import org.starset.deltaforcestrike.command.DFSCommand;
 import org.starset.deltaforcestrike.game.GameRulesService;
 import org.starset.deltaforcestrike.grenade.GrenadeService;
+import org.starset.deltaforcestrike.hud.HudSyncService;
 import org.starset.deltaforcestrike.item.ItemGiveService;
 import org.starset.deltaforcestrike.item.ItemManager;
 import org.starset.deltaforcestrike.listener.ArenaPlayerListener;
@@ -56,6 +57,7 @@ public final class DeltaForceStrike extends JavaPlugin {
     private OperatorService operatorService;
     private SpectatorLockService spectatorLockService;
     private InventoryLockListener inventoryLockListener;
+    private HudSyncService hudSyncService;
 
     @Override
     public void onEnable() {
@@ -86,6 +88,8 @@ public final class DeltaForceStrike extends JavaPlugin {
         tabListService = new TabListService(this);
         nametagService = new NametagService(this);
         spectatorLockService = new SpectatorLockService(this);
+        hudSyncService = new HudSyncService(this);
+        hudSyncService.register();
 
         gameManager = new GameManager(this);
 
@@ -135,6 +139,9 @@ public final class DeltaForceStrike extends JavaPlugin {
         // 侧边栏 + 铭牌
         getServer().getScheduler().runTaskTimer(this, scoreboardService::tick, 20L, 20L);
 
+        // Fabric ClientUI HUD 同步
+        getServer().getScheduler().runTaskTimer(this, hudSyncService::tick, 10L, 10L);
+
         // 旁观锁友方
         getServer().getScheduler().runTaskTimer(this, spectatorLockService::tickAll, 20L, 10L);
 
@@ -168,6 +175,9 @@ public final class DeltaForceStrike extends JavaPlugin {
         }
         if (scoreboardService != null) {
             scoreboardService.removeAll();
+        }
+        if (hudSyncService != null) {
+            hudSyncService.unregister();
         }
         if (gameManager != null) {
             gameManager.shutdown();
@@ -241,5 +251,9 @@ public final class DeltaForceStrike extends JavaPlugin {
 
     public InventoryLockListener getInventoryLockListener() {
         return inventoryLockListener;
+    }
+
+    public HudSyncService getHudSyncService() {
+        return hudSyncService;
     }
 }
