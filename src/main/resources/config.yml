@@ -1,0 +1,185 @@
+# ============================================================
+# DeltaForceStrike - 主配置
+# 实际运行文件: plugins/DeltaForceStrike/config.yml
+# 修改 src 后不会自动覆盖已有 plugins 配置，请手动同步或删除后重启
+# ============================================================
+
+world:
+  # 唯一竞技世界名（必须与世界文件夹名一致）
+  arena: delta_force_strike
+
+# ---------- 队列（人数唯一来源，不要再写 game.max-player）----------
+queue:
+  # 每队人数（3v3 改为 3）
+  team-size: 5
+  # 总人数（注意是 max-players）
+  max-players: 10
+  # 满人后倒计时（秒）
+  countdown-seconds: 15
+  # 倒计时中人数不足是否取消
+  cancel-if-not-full: true
+  # 倒计时结束自动平衡队伍
+  auto-balance: true
+  # 倒计时阶段是否禁止新人加入
+  lock-during-countdown: true
+  # 倒计时到达这些秒数的时候提醒加入队伍
+  team-click-remind-seconds: [15, 10]
+
+# ---------- 干员 ----------
+operator:
+  enabled: true
+  select-enabled: true
+  select-seconds: 45          # 超时仍强制开打
+
+guide:
+  # 新加入队列时是否自动发送玩法
+  send-on-join: true
+
+# ---------- 比赛 ----------
+match:
+  # 半场回合数：打完该回合后换边（T↔CT，比分对调）
+  half-round: 12
+  # 先到该胜场数获胜
+  win-target: 13
+  # 最多回合（含换边后）
+  max-rounds: 24
+  # 整局结束 Title 停留后再回队列
+  end-title-delay-ticks: 70
+  # 友方伤害：false=关闭（可用 /dfs config friendly-fire true 运行时改）
+  friendly-fire: false
+
+# ---------- 经济 ----------
+economy:
+  start-money: 800
+  victory-bonus: 3200
+  defeat-bonus:
+    - 2000
+    - 2550
+    - 3100
+  loss-streak-bonus:
+    - 2000
+    - 2550
+    - 3100
+  pistol-round-bonus: 2550
+  kill-reward: 300
+  plant-reward: 300
+  defuse-reward: 200
+  ct-death-bonus-per-t: 100
+
+# ---------- 回合 ----------
+round:
+  # 购买阶段（秒）
+  prepare-time: 20
+  # 战斗/进攻时间（秒）；超时且未安包 → CT 胜
+  combat-time: 100
+  # 购买阶段出生点水平活动半径（格）
+  buy-zone-radius: 5
+  natural-regeneration: false
+  auto-food: true
+  difficulty: EASY
+
+# ---------- 玩家 ----------
+player:
+  max-health: 20
+  keep-inventory: false
+  drop-equipment: false
+  armor-vanish: true
+  allow-diamond-armor: false
+  shield-enabled: false
+
+spectator:
+  # 死亡后强制观战友方
+  lock-to-teammates: true
+  # 滚轮切换队友
+  scroll-cycle: true
+
+# ---------- 炸弹 ----------
+bomb:
+  plant-time: 3
+  explosion-time: 40
+  defuse-time: 10
+  defuse-time-with-kit: 5
+  damage: 30
+  damage-radius: 35
+  damage-falloff: true
+  # 安放后滴滴（音符盒）；>10s 慢滴半径 50；≤10s 加速且半径扩到 200
+  beep:
+    enabled: true
+    sound: block.note_block.pling   # 或 BLOCK_NOTE_BLOCK_PLING（Registry 解析，无 valueOf）
+    early-interval-ticks: 20    # >10s 约 1 次/秒
+    early-radius: 50
+    late-threshold-seconds: 10
+    late-min-interval-ticks: 2  # 最后约 10 次/秒
+    late-max-radius: 200
+  # A/B 包点中心浮动文字
+  site-markers:
+    enabled: true
+    y-offset: 1.6
+    scale: 1.2
+  sites:
+    a:
+      world: delta_force_strike
+      x: -113.5
+      y: -48.0
+      z: -126.5
+      radius: 10.0
+    b:
+      world: delta_force_strike
+      x: -54.5
+      y: -48.0
+      z: -40.5
+      radius: 9.0
+
+grenade:
+  particle-multiplier: 2.0
+  smoke:
+    duration-ticks: 160 # 8 秒
+    radius: 6.0
+    apply-darkness: false # true 则云内短暂黑暗，遮挡更强
+  wither:
+    duration-ticks: 120   # 6 秒
+    radius: 6.0
+    amplifier: 7          # 0 = 凋零 I
+  incendiary:
+    radius: 4.5
+    damage: 4.0 # 约 2 心，边缘衰减
+    knockback-horizontal: 2.2
+    knockback-vertical: 0.85
+    self-damage: false # false=不伤自己但仍击退
+    place-fire: false
+
+# ---------- 出生点（务必用 /dfs setspawn 写入真实坐标）----------
+# 若仍为示例值，请站在安全方块上执行:
+#   /dfs setspawn queue
+#   /dfs setspawn t
+#   /dfs setspawn ct
+
+locations:
+  queue-spawn:
+    world: delta_force_strike
+    x: 0.5
+    y: -50.0
+    z: 0.5
+    yaw: 0
+    pitch: 0
+  team-t-spawn:
+    world: delta_force_strike
+    x: 0.5
+    y: 0.0
+    z: 0.5
+    yaw: -90
+    pitch: 0
+  team-ct-spawn:
+    world: delta_force_strike
+    x: 0.5
+    y: 0.0
+    z: 0.5
+    yaw: 90
+    pitch: 0
+
+# 商店 / 装备补充
+shop:
+  arrows-per-ranged: 25   # 背包箭矢上限 / 发远程时补满数量
+
+debug:
+  enabled: false
