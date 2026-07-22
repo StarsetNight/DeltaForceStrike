@@ -186,13 +186,13 @@ shop:
 # ---------- 导播 / Live Overlay（CS2 Major 风格）----------
 # HTTP 接口需 token；浏览器打开 /overlay?token=xxx
 live:
-  enabled: true
+  enabled: fale
   # 监听地址：0.0.0.0 全网卡；仅本机用 127.0.0.1
   bind: 0.0.0.0
   port: 25564
   # 鉴权密钥（必填，否则不启动）。请求头 Authorization: Bearer <token>
   # 或查询参数 ?token=<token> 或头 X-DFS-Token
-  token: "7b3d9f2a4e8c1d6f5a0b2e4c8f7d3a9b"
+  token: ""
   # 主线程刷新快照间隔（tick，5≈0.25s，金钱更实时）
   refresh-ticks: 5
   map:

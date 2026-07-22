@@ -248,23 +248,24 @@ public final class LiveOverlayHtml {
   .kf.world .w { color: #c0c8d8; }
 
   /* ========== 左上小雷达 ========== */
+  /* 透明底 + 黑色描边，OBS 可在下层塞地图图片 */
   #minimap {
     position: absolute;
     top: 14px;
     left: 14px;
     width: 168px;
     height: 168px;
-    background: rgba(8,10,16,.72);
-    border: 1px solid var(--line);
+    background: transparent;
+    border: 2px solid #000;
     border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0,0,0,.35);
+    box-shadow: none;
     z-index: 12;
     overflow: hidden;
   }
   #minimap.hidden { display: none; }
   #radar {
     position: absolute; inset: 0;
-    background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.04), transparent 65%), #0e131c;
+    background: transparent;
   }
   .site {
     position: absolute; border: 1.5px solid rgba(231,76,60,.7);
