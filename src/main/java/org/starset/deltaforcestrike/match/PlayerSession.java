@@ -1,6 +1,7 @@
 package org.starset.deltaforcestrike.match;
 
 import org.bukkit.entity.Player;
+import org.starset.deltaforcestrike.util.ConfigKeys;
 
 import java.util.UUID;
 
@@ -58,18 +59,28 @@ public class PlayerSession {
     }
 
     public void setMoney(int money) {
-        this.money = Math.max(0, money);
+        int cap = ConfigKeys.maxMoney();
+        // 任何途径都不能超过经济上限
+        this.money = Math.max(0, Math.min(cap, money));
     }
 
     public void addMoney(int amount) {
+        if (amount <= 0) {
+            setMoney(this.money + amount);
+            return;
+        }
         setMoney(this.money + amount);
     }
 
     public boolean spend(int amount) {
+        if (amount <= 0) {
+            return true;
+        }
         if (money < amount) {
             return false;
         }
-        money -= amount;
+        // 扣款后仍夹在 [0, max]
+        setMoney(money - amount);
         return true;
     }
 

@@ -43,6 +43,11 @@ public final class ConfigKeys {
         return Math.max(1, cfg().getInt("shop.arrows-per-ranged", 15));
     }
 
+    /** 经济上限（默认 16000） */
+    public static int maxMoney() {
+        return Math.max(0, cfg().getInt("economy.max-money", 16000));
+    }
+
     /**
      * 读取 locations.xxx；缺键返回 null。
      */

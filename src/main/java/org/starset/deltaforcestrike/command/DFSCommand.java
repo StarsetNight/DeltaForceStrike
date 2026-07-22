@@ -206,12 +206,17 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         if (plugin.getBombSiteMarkerService() != null) {
             plugin.getBombSiteMarkerService().respawnAll();
         }
+        plugin.reloadLiveService();
+        boolean liveOn = plugin.getConfig().getBoolean("live.enabled", false)
+                && plugin.getLiveHttpServer() != null
+                && plugin.getLiveHttpServer().isRunning();
         sender.sendMessage("§a已重载配置/物品/干员。物品:"
                 + plugin.getItemManager().getAll().size()
                 + " 干员:"
                 + (plugin.getOperatorService() == null ? 0
                 : plugin.getOperatorService().getRegistry().allUnique().size())
-                + " §7友伤:" + plugin.getConfig().getBoolean("match.friendly-fire", false));
+                + " §7友伤:" + plugin.getConfig().getBoolean("match.friendly-fire", false)
+                + " §7Live:" + (liveOn ? "§aON:" + plugin.getConfig().getInt("live.port", 8765) : "§coff"));
     }
 
     /**

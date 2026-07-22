@@ -51,6 +51,8 @@ match:
 # ---------- 经济 ----------
 economy:
   start-money: 800
+  # 经济上限：任何途径获得金钱后都不会超过此值
+  max-money: 16000
   victory-bonus: 3200
   defeat-bonus:
     - 2000
@@ -99,8 +101,8 @@ bomb:
   explosion-time: 40
   defuse-time: 10
   defuse-time-with-kit: 5
-  damage: 30
-  damage-radius: 35
+  damage: 50
+  damage-radius: 60
   damage-falloff: true
   # 安放后滴滴（音符盒）；>10s 慢滴半径 50；≤10s 加速且半径扩到 200
   beep:
@@ -180,6 +182,28 @@ locations:
 # 商店 / 装备补充
 shop:
   arrows-per-ranged: 25   # 背包箭矢上限 / 发远程时补满数量
+
+# ---------- 导播 / Live Overlay（CS2 Major 风格）----------
+# HTTP 接口需 token；浏览器打开 /overlay?token=xxx
+live:
+  enabled: true
+  # 监听地址：0.0.0.0 全网卡；仅本机用 127.0.0.1
+  bind: 0.0.0.0
+  port: 25564
+  # 鉴权密钥（必填，否则不启动）。请求头 Authorization: Bearer <token>
+  # 或查询参数 ?token=<token> 或头 X-DFS-Token
+  token: "7b3d9f2a4e8c1d6f5a0b2e4c8f7d3a9b"
+  # 主线程刷新快照间隔（tick，5≈0.25s，金钱更实时）
+  refresh-ticks: 5
+  map:
+    # 雷达显示名
+    name: "炼狱小镇"
+    # 地图两角（世界坐标，用于雷达归一化）
+    # 请用 /dfs setsite 附近或 F3 坐标标定：西南角 min、东北角 max
+    min-x: -200.0
+    min-z: -200.0
+    max-x: 50.0
+    max-z: 50.0
 
 debug:
   enabled: false

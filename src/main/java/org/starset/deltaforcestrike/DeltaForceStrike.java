@@ -12,6 +12,9 @@ import org.starset.deltaforcestrike.game.GameRulesService;
 import org.starset.deltaforcestrike.grenade.GrenadeService;
 import org.starset.deltaforcestrike.hud.HudSyncService;
 import org.starset.deltaforcestrike.item.ItemGiveService;
+import org.starset.deltaforcestrike.live.LiveHttpServer;
+import org.starset.deltaforcestrike.live.LiveKillFeedService;
+import org.starset.deltaforcestrike.live.LiveSnapshotService;
 import org.starset.deltaforcestrike.item.ItemManager;
 import org.starset.deltaforcestrike.listener.ArenaPlayerListener;
 import org.starset.deltaforcestrike.listener.BombListener;
@@ -58,6 +61,9 @@ public final class DeltaForceStrike extends JavaPlugin {
     private SpectatorLockService spectatorLockService;
     private InventoryLockListener inventoryLockListener;
     private HudSyncService hudSyncService;
+    private LiveSnapshotService liveSnapshotService;
+    private LiveKillFeedService liveKillFeedService;
+    private LiveHttpServer liveHttpServer;
 
     @Override
     public void onEnable() {
@@ -90,6 +96,10 @@ public final class DeltaForceStrike extends JavaPlugin {
         spectatorLockService = new SpectatorLockService(this);
         hudSyncService = new HudSyncService(this);
         hudSyncService.register();
+
+        liveKillFeedService = new LiveKillFeedService();
+        liveSnapshotService = new LiveSnapshotService(this);
+        liveHttpServer = new LiveHttpServer(this, liveSnapshotService);
 
         gameManager = new GameManager(this);
 
@@ -142,6 +152,15 @@ public final class DeltaForceStrike extends JavaPlugin {
         // Fabric ClientUI HUD 同步
         getServer().getScheduler().runTaskTimer(this, hudSyncService::tick, 10L, 10L);
 
+        // 导播快照（主线程，默认 5 tick≈0.25s，金钱/血量近实时）+ HTTP 服务
+        int liveRefresh = Math.max(2, getConfig().getInt("live.refresh-ticks", 5));
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            if (liveSnapshotService != null) {
+                liveSnapshotService.tick();
+            }
+        }, liveRefresh, liveRefresh);
+        liveHttpServer.start();
+
         // 旁观锁友方
         getServer().getScheduler().runTaskTimer(this, spectatorLockService::tickAll, 20L, 10L);
 
@@ -179,10 +198,24 @@ public final class DeltaForceStrike extends JavaPlugin {
         if (hudSyncService != null) {
             hudSyncService.unregister();
         }
+        if (liveHttpServer != null) {
+            liveHttpServer.stop();
+        }
         if (gameManager != null) {
             gameManager.shutdown();
         }
         getLogger().info("DeltaForceStrike 已关闭");
+    }
+
+    /** 重载配置后重启导播 HTTP（主线程调用） */
+    public void reloadLiveService() {
+        if (liveHttpServer != null) {
+            liveHttpServer.stop();
+            liveHttpServer.start();
+        }
+        if (liveSnapshotService != null) {
+            liveSnapshotService.tick();
+        }
     }
 
     // ------------------------------------------------------------------
@@ -255,5 +288,17 @@ public final class DeltaForceStrike extends JavaPlugin {
 
     public HudSyncService getHudSyncService() {
         return hudSyncService;
+    }
+
+    public LiveSnapshotService getLiveSnapshotService() {
+        return liveSnapshotService;
+    }
+
+    public LiveHttpServer getLiveHttpServer() {
+        return liveHttpServer;
+    }
+
+    public LiveKillFeedService getLiveKillFeedService() {
+        return liveKillFeedService;
     }
 }

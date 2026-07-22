@@ -46,6 +46,8 @@ public class BombManager {
     private final DeltaForceStrike plugin;
 
     private boolean planted;
+    /** 爆炸伤害结算中：伪死亡记为改造TNT 击杀 */
+    private boolean exploding;
     private Location plantLocation;
     private TNTPrimed primed;
     private BukkitTask fuseTask;
@@ -109,6 +111,11 @@ public class BombManager {
 
     public boolean isPlanted() {
         return planted;
+    }
+
+    /** 爆炸伤害结算窗口（用于导播击杀归因） */
+    public boolean isExploding() {
+        return exploding;
     }
 
     /** 剩余整秒；未安包为 -1 */
@@ -447,53 +454,58 @@ public class BombManager {
         primed = null;
         planted = false;
         fuseLeft = -1;
+        exploding = true;
 
-        if (loc != null && loc.getWorld() != null) {
-            try {
-                loc.getWorld().spawnParticle(Particle.EXPLOSION_EMITTER, loc, 3);
-            } catch (Throwable t) {
-                loc.getWorld().spawnParticle(Particle.EXPLOSION, loc, 4);
-            }
-            loc.getWorld().playSound(loc, Sound.ENTITY_GENERIC_EXPLODE, 2.5f, 0.7f);
-
-            double radius = plugin.getConfig().getDouble("bomb.damage-radius", 18.0);
-            double maxDamage = plugin.getConfig().getDouble("bomb.damage", 36.0);
-
-            for (Player p : loc.getWorld().getPlayers()) {
-                if (!plugin.getMatchManager().isInMatch(p)) {
-                    continue;
-                }
-                if (p.getGameMode() == GameMode.SPECTATOR) {
-                    continue;
-                }
-                PlayerSession s = match != null ? match.getSession(p.getUniqueId()) : null;
-                if (s != null && !s.isAlive()) {
-                    continue;
-                }
-
-                double dist = p.getLocation().distance(loc);
-                if (dist > radius) {
-                    continue;
-                }
-
-                double dmg = damageByDistance(dist, radius, maxDamage);
-                if (dmg <= 0) {
-                    continue;
-                }
-
-                p.damage(dmg);
+        try {
+            if (loc != null && loc.getWorld() != null) {
                 try {
-                    Vector knock = p.getLocation().toVector().subtract(loc.toVector());
-                    if (knock.lengthSquared() < 0.01) {
-                        knock = p.getLocation().getDirection().multiply(-1);
-                    }
-                    knock.normalize();
-                    double kbScale = Math.max(0.25, 1.0 - dist / radius);
-                    p.setVelocity(knock.multiply(1.5 * kbScale).setY(0.35 + 0.4 * kbScale));
-                } catch (Throwable ignored) {
+                    loc.getWorld().spawnParticle(Particle.EXPLOSION_EMITTER, loc, 3);
+                } catch (Throwable t) {
+                    loc.getWorld().spawnParticle(Particle.EXPLOSION, loc, 4);
                 }
-                p.setFallDistance(0f);
+                loc.getWorld().playSound(loc, Sound.ENTITY_GENERIC_EXPLODE, 2.5f, 0.7f);
+
+                double radius = plugin.getConfig().getDouble("bomb.damage-radius", 18.0);
+                double maxDamage = plugin.getConfig().getDouble("bomb.damage", 36.0);
+
+                for (Player p : loc.getWorld().getPlayers()) {
+                    if (!plugin.getMatchManager().isInMatch(p)) {
+                        continue;
+                    }
+                    if (p.getGameMode() == GameMode.SPECTATOR) {
+                        continue;
+                    }
+                    PlayerSession s = match != null ? match.getSession(p.getUniqueId()) : null;
+                    if (s != null && !s.isAlive()) {
+                        continue;
+                    }
+
+                    double dist = p.getLocation().distance(loc);
+                    if (dist > radius) {
+                        continue;
+                    }
+
+                    double dmg = damageByDistance(dist, radius, maxDamage);
+                    if (dmg <= 0) {
+                        continue;
+                    }
+
+                    p.damage(dmg);
+                    try {
+                        Vector knock = p.getLocation().toVector().subtract(loc.toVector());
+                        if (knock.lengthSquared() < 0.01) {
+                            knock = p.getLocation().getDirection().multiply(-1);
+                        }
+                        knock.normalize();
+                        double kbScale = Math.max(0.25, 1.0 - dist / radius);
+                        p.setVelocity(knock.multiply(1.5 * kbScale).setY(0.35 + 0.4 * kbScale));
+                    } catch (Throwable ignored) {
+                    }
+                    p.setFallDistance(0f);
+                }
             }
+        } finally {
+            exploding = false;
         }
 
         plantLocation = null;

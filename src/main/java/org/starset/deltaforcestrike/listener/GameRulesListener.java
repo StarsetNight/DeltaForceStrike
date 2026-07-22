@@ -124,33 +124,56 @@ public class GameRulesListener implements Listener {
     // ------------------------------------------------------------------
 
     /**
-     * 关闭友方伤害（match.friendly-fire=false 时）。
+     * 队列 / 倒计时 / 选干员 / 结算：禁止一切 PvP。
+     * 对局进行中：再按 friendly-fire 处理友伤。
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onFriendlyFire(EntityDamageByEntityEvent event) {
         if (!(event.getEntity() instanceof Player victim)) {
             return;
         }
-        if (!Worlds.isArena(victim) || !plugin.getMatchManager().isInMatch(victim)) {
-            return;
-        }
-        if (plugin.getConfig().getBoolean("match.friendly-fire", false)) {
+        if (!Worlds.isArena(victim)) {
             return;
         }
         Player attacker = findKillerPlayer(event);
         if (attacker == null || attacker.getUniqueId().equals(victim.getUniqueId())) {
             return;
         }
-        if (!plugin.getMatchManager().isInMatch(attacker)) {
+        if (!Worlds.isArena(attacker)) {
             return;
         }
+
         Match match = plugin.getMatchManager().getMatch();
-        if (match == null) {
+        MatchState state = match == null ? null : match.getState();
+
+        // 未开打 / 已结束：竞技世界内玩家互伤一律取消
+        if (state == null
+                || state == MatchState.WAITING
+                || state == MatchState.COUNTDOWN
+                || state == MatchState.AGENT_SELECT
+                || state == MatchState.ENDING) {
+            event.setCancelled(true);
+            return;
+        }
+
+        // 对局进行中：仅处理双方都在局内的情况
+        if (state != MatchState.IN_PROGRESS) {
+            event.setCancelled(true);
+            return;
+        }
+        if (!plugin.getMatchManager().isInMatch(victim)
+                || !plugin.getMatchManager().isInMatch(attacker)) {
+            // 旁观等待区的人也不能被打 / 打人
+            event.setCancelled(true);
+            return;
+        }
+        if (plugin.getConfig().getBoolean("match.friendly-fire", false)) {
             return;
         }
         PlayerSession vs = match.getSession(victim.getUniqueId());
         PlayerSession as = match.getSession(attacker.getUniqueId());
         if (vs == null || as == null || !vs.hasTeam() || !as.hasTeam()) {
+            event.setCancelled(true);
             return;
         }
         if (vs.getTeam() == as.getTeam()) {
@@ -428,6 +451,43 @@ public class GameRulesListener implements Listener {
             if (!viewer.getUniqueId().equals(victim.getUniqueId())) {
                 viewer.sendActionBar(message);
             }
+        }
+        pushLiveKill(victim, info);
+    }
+
+    /** 导播覆盖层击杀滚动 */
+    private void pushLiveKill(Player victim, KillInfo info) {
+        var feed = plugin.getLiveKillFeedService();
+        if (feed == null || victim == null || info == null) {
+            return;
+        }
+        Match match = plugin.getMatchManager().getMatch();
+        PlayerSession vs = match == null ? null : match.getSession(victim.getUniqueId());
+        String vTeam = vs != null && vs.getTeam() != null ? vs.getTeam().name() : "";
+        String kTeam = "";
+        if (info.killerName != null && match != null) {
+            for (PlayerSession s : match.getSessions().values()) {
+                if (info.killerName.equals(s.getName())) {
+                    kTeam = s.getTeam() != null ? s.getTeam().name() : "";
+                    break;
+                }
+            }
+        }
+        // 炸弹爆炸致死：显示「改造TNT 被击杀者」
+        boolean bombExploding = plugin.getBombManager() != null && plugin.getBombManager().isExploding();
+        String cause = info.causeLabel == null ? "" : info.causeLabel;
+        if (bombExploding || (info.killerName == null && "爆炸".equals(cause))) {
+            feed.pushBombKill(victim.getName(), vTeam);
+            return;
+        }
+        if (info.killerName != null && info.weaponName != null) {
+            feed.pushPlayerKill(info.killerName, info.weaponName, victim.getName(), kTeam, vTeam);
+        } else if (info.killerName != null) {
+            feed.pushPlayerKill(info.killerName, "击杀", victim.getName(), kTeam, vTeam);
+        } else if (info.causeLabel != null) {
+            feed.pushWorldKill(info.causeLabel, victim.getName(), vTeam);
+        } else {
+            feed.pushWorldKill("战损", victim.getName(), vTeam);
         }
     }
 
