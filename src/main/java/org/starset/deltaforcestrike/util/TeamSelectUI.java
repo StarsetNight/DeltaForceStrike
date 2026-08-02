@@ -53,7 +53,7 @@ public final class TeamSelectUI {
         }
 
         TeamSelectHolder holder = new TeamSelectHolder();
-        Inventory inv = Bukkit.createInventory(holder, 54, TITLE);
+        Inventory inv = Bukkit.createInventory(holder, 54, SpigotCompat.legacy(TITLE));
         holder.setInventory(inv);
 
         ItemStack pane = pane(Material.GRAY_STAINED_GLASS_PANE, " ");
@@ -96,7 +96,7 @@ public final class TeamSelectUI {
         }
         for (Player p : match.onlinePlayers()) {
             giveBook(p);
-            p.sendMessage(Component.text("[DFS] ", NamedTextColor.GOLD)
+            SpigotCompat.sendMessage(p, Component.text("[DFS] ", NamedTextColor.GOLD)
                     .append(Component.text("右键热键第1格「选择队伍」书打开选边", NamedTextColor.YELLOW)));
         }
     }
@@ -123,8 +123,8 @@ public final class TeamSelectUI {
     public static ItemStack createBookItem() {
         ItemStack book = new ItemStack(Material.BOOK);
         ItemMeta meta = book.getItemMeta();
-        meta.displayName(Component.text("选择队伍", NamedTextColor.GOLD, TextDecoration.BOLD));
-        meta.lore(List.of(
+        SpigotCompat.itemName(meta, Component.text("选择队伍", NamedTextColor.GOLD, TextDecoration.BOLD));
+        SpigotCompat.itemLore(meta, List.of(
                 Component.text("右键打开选队界面", NamedTextColor.YELLOW),
                 Component.text("T 进攻 · CT 防守", NamedTextColor.GRAY)
         ));
@@ -144,10 +144,10 @@ public final class TeamSelectUI {
             return;
         }
         if (team == Team.T) {
-            player.sendMessage(Component.text("✔ 已加入 ", NamedTextColor.GREEN)
+            SpigotCompat.sendMessage(player, Component.text("✔ 已加入 ", NamedTextColor.GREEN)
                     .append(Component.text("进攻方 T", NamedTextColor.RED, TextDecoration.BOLD)));
         } else if (team == Team.CT) {
-            player.sendMessage(Component.text("✔ 已加入 ", NamedTextColor.GREEN)
+            SpigotCompat.sendMessage(player, Component.text("✔ 已加入 ", NamedTextColor.GREEN)
                     .append(Component.text("防守方 CT", NamedTextColor.AQUA, TextDecoration.BOLD)));
         }
     }
@@ -193,7 +193,7 @@ public final class TeamSelectUI {
         ItemMeta meta = stack.getItemMeta();
         String name = team == Team.T ? "进攻方 T" : "防守方 CT";
         NamedTextColor color = team == Team.T ? NamedTextColor.RED : NamedTextColor.AQUA;
-        meta.displayName(Component.text(
+        SpigotCompat.itemName(meta, Component.text(
                 (mine ? "✔ " : "") + name + "  (" + count + "/" + cap + ")",
                 mine ? NamedTextColor.GREEN : (full ? NamedTextColor.DARK_GRAY : color),
                 TextDecoration.BOLD));
@@ -206,7 +206,7 @@ public final class TeamSelectUI {
         } else {
             lore.add(Component.text("点击加入", NamedTextColor.YELLOW));
         }
-        meta.lore(lore);
+        SpigotCompat.itemLore(meta, lore);
         meta.getPersistentDataContainer().set(
                 ItemKeys.id(), PersistentDataType.STRING,
                 "team_select:" + team.name().toLowerCase());
@@ -236,8 +236,8 @@ public final class TeamSelectUI {
                 teamColor = NamedTextColor.AQUA;
             }
         }
-        meta.displayName(Component.text(p.getName(), NamedTextColor.WHITE));
-        meta.lore(List.of(Component.text("阵营: " + teamLabel, teamColor)));
+        SpigotCompat.itemName(meta, Component.text(p.getName(), NamedTextColor.WHITE));
+        SpigotCompat.itemLore(meta, List.of(Component.text("阵营: " + teamLabel, teamColor)));
         head.setItemMeta(meta);
         return head;
     }
@@ -245,8 +245,8 @@ public final class TeamSelectUI {
     private static ItemStack tipBook() {
         ItemStack stack = new ItemStack(Material.WRITABLE_BOOK);
         ItemMeta meta = stack.getItemMeta();
-        meta.displayName(Component.text("说明", NamedTextColor.YELLOW));
-        meta.lore(List.of(
+        SpigotCompat.itemName(meta, Component.text("说明", NamedTextColor.YELLOW));
+        SpigotCompat.itemLore(meta, List.of(
                 Component.text("上方点击 T / CT 加入", NamedTextColor.GRAY),
                 Component.text("下方为全员当前阵营", NamedTextColor.GRAY)
         ));
@@ -257,7 +257,7 @@ public final class TeamSelectUI {
     private static ItemStack pane(Material mat, String name) {
         ItemStack stack = new ItemStack(mat);
         ItemMeta meta = stack.getItemMeta();
-        meta.displayName(LEGACY.deserialize(name));
+        SpigotCompat.itemName(meta, LEGACY.deserialize(name));
         stack.setItemMeta(meta);
         return stack;
     }

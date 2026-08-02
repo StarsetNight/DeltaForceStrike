@@ -2,17 +2,17 @@
 
 ## 友谊之约：反制行动
 
-基于 PaperMC 的 5v5/3v3 回合制战术竞技插件
+基于纯 Spigot 的 5v5/3v3 回合制战术竞技插件（beta）
 
-![PaperMC](https://img.shields.io/badge/PaperMC-Plugin-green)
+![Spigot](https://img.shields.io/badge/Spigot-Plugin-green)
 ![Java](https://img.shields.io/badge/Java-25%2B-orange)
-![Minecraft](https://img.shields.io/badge/Minecraft-26.2-blue)
+![Minecraft](https://img.shields.io/badge/Minecraft-1.21.8-blue)
 
 ---
 
 ## 📖 简介
 
-**DeltaForceStrike（友谊之约：反制行动）** 是一个基于 **PaperMC** 的 Minecraft 回合制战术竞技插件。
+**DeltaForceStrike（友谊之约：反制行动）** 是一个基于 **纯 Spigot API** 的 Minecraft 回合制战术竞技插件。
 
 插件融合了：
 
@@ -322,9 +322,9 @@ DeltaForceStrike
 
 | 项目 | 要求                              |
 |------|---------------------------------|
-| Minecraft | 26.2+                           |
-| Server | Paper (建议最新 26.2 版本)            |
-| Java | 25+                             |
+| Minecraft | 1.21.8+                         |
+| Server | Spigot 1.21.8（beta）                 |
+| Java | 21+                             |
 | 世界 | 独立竞技世界（名为 `delta_force_strike`） |
 
 ---

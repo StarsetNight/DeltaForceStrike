@@ -174,7 +174,7 @@ public final class DeltaForceStrike extends JavaPlugin {
         bombDropGlowService.start();
         bombSiteMarkerService.start();
 
-        getLogger().info("DeltaForceStrike v" + getPluginMeta().getVersion() + " 已启动");
+        getLogger().info("DeltaForceStrike v" + getDescription().getVersion() + " 已启动");
         getLogger().info("竞技世界: " + Worlds.arenaName()
                 + " | 物品: " + itemManager.getAll().size()
                 + " | 干员: " + (operatorService.getRegistry() == null

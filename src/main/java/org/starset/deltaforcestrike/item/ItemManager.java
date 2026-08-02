@@ -1,7 +1,5 @@
 package org.starset.deltaforcestrike.item;
 
-import io.papermc.paper.registry.RegistryAccess;
-import io.papermc.paper.registry.RegistryKey;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Material;
@@ -19,6 +17,7 @@ import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.starset.deltaforcestrike.DeltaForceStrike;
+import org.starset.deltaforcestrike.util.SpigotCompat;
 
 import java.io.File;
 import java.util.Collections;
@@ -246,7 +245,7 @@ public class ItemManager {
     // ------------------------------------------------------------------
 
     private void applyMetaTags(ItemMeta meta, GameItem def) {
-        meta.displayName(color(def.getName()));
+        SpigotCompat.itemName(meta, color(def.getName()));
         meta.getPersistentDataContainer().set(ItemKeys.id(), PersistentDataType.STRING, def.getId());
         meta.getPersistentDataContainer().set(
                 ItemKeys.type(),
@@ -319,7 +318,7 @@ public class ItemManager {
         ItemStack stack = new ItemStack(material);
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
-            meta.displayName(color(def.getName()));
+            SpigotCompat.itemName(meta, color(def.getName()));
             meta.getPersistentDataContainer().set(ItemKeys.id(), PersistentDataType.STRING, def.getId());
             meta.getPersistentDataContainer().set(ItemKeys.type(), PersistentDataType.STRING, "armor");
             meta.getPersistentDataContainer().set(ItemKeys.undroppable(), PersistentDataType.BYTE, (byte) 1);
@@ -643,19 +642,6 @@ public class ItemManager {
         } catch (Throwable ignored) {
         }
         try {
-            var reg = RegistryAccess.registryAccess()
-                    .getRegistry(RegistryKey.ATTRIBUTE);
-            Attribute a = reg.get(NamespacedKey.minecraft(modernKey));
-            if (a != null) {
-                return a;
-            }
-            a = reg.get(NamespacedKey.minecraft(legacyKey));
-            if (a != null) {
-                return a;
-            }
-        } catch (Throwable ignored) {
-        }
-        try {
             Object v = Attribute.class.getField(legacyField).get(null);
             if (v instanceof Attribute a) {
                 return a;
@@ -674,7 +660,7 @@ public class ItemManager {
 
     /**
      * max-durability: 剩余可用次数。
-     * 优先 Paper setMaxDamage；否则用 damage = 材质默认耐久 - 配置值。
+     * Spigot 没有自定义最大耐久 API，使用 damage = 材质默认耐久 - 配置值。
      */
     private void applyCustomDurability(ItemStack stack, GameItem def) {
         if (stack == null || def == null || def.getMaxDurability() <= 0) {
@@ -685,7 +671,7 @@ public class ItemManager {
         if (!(meta instanceof Damageable damageable)) {
             return;
         }
-        // Paper 1.20.5+：直接设最大耐久
+        // 纯 Spigot 兼容实现：用已损值模拟剩余耐久。
         try {
             damageable.getClass().getMethod("setMaxDamage", int.class).invoke(damageable, want);
             damageable.setDamage(0);
@@ -722,21 +708,11 @@ public class ItemManager {
         };
 
         try {
-            var reg = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT);
-            Enchantment e = reg.get(NamespacedKey.minecraft(k));
+            Enchantment e = Enchantment.getByKey(NamespacedKey.minecraft(k));
             if (e != null) {
                 return e;
             }
             // 遍历兜底（部分构建 key 写法不同）
-            for (Enchantment ench : reg) {
-                if (ench == null) {
-                    continue;
-                }
-                NamespacedKey nk = ench.getKey();
-                if (nk != null && nk.getKey().equalsIgnoreCase(k)) {
-                    return ench;
-                }
-            }
         } catch (Throwable t) {
             plugin.getLogger().warning("解析附魔失败 " + key + ": " + t.getMessage());
         }

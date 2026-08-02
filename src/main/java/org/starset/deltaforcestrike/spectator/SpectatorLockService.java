@@ -5,6 +5,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 import org.starset.deltaforcestrike.DeltaForceStrike;
+import org.starset.deltaforcestrike.util.SpigotCompat;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
@@ -76,11 +77,11 @@ public class SpectatorLockService {
         Player target = findBestTeammate(dead);
         if (target != null) {
             attach(dead, target);
-            dead.sendActionBar(net.kyori.adventure.text.Component.text(
+            SpigotCompat.actionBar(dead, net.kyori.adventure.text.Component.text(
                     "§7观战队友: §f" + target.getName() + " §8| 滚轮可切换"));
         } else {
             dead.setSpectatorTarget(null);
-            dead.sendActionBar(net.kyori.adventure.text.Component.text("§7暂无存活队友可观战"));
+            SpigotCompat.actionBar(dead, net.kyori.adventure.text.Component.text("§7暂无存活队友可观战"));
         }
     }
 
@@ -234,7 +235,7 @@ public class SpectatorLockService {
         idx = Math.floorMod(idx + direction, list.size());
         Player next = list.get(idx);
         attach(spectator, next);
-        spectator.sendActionBar(net.kyori.adventure.text.Component.text(
+        SpigotCompat.actionBar(spectator, net.kyori.adventure.text.Component.text(
                 "§7观战: §f" + next.getName() + " §8(" + (idx + 1) + "/" + list.size() + ")"));
     }
 

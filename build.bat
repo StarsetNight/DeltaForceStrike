@@ -5,7 +5,7 @@ cd /d "%~dp0"
 
 where java >nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] Java was not found. Please install Java 25 and add it to PATH.
+    echo [ERROR] Java was not found. Please install Java 21 and add it to PATH.
     exit /b 1
 )
 

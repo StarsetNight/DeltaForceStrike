@@ -13,6 +13,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.starset.deltaforcestrike.DeltaForceStrike;
+import org.starset.deltaforcestrike.util.SpigotCompat;
 import org.starset.deltaforcestrike.item.ItemKeys;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.PlayerSession;
@@ -396,8 +397,8 @@ public class OperatorService {
         }
 
         String suffix = buildSuffix(skill, kind, load);
-        meta.displayName(LEGACY.deserialize("§d" + skill.getName() + suffix));
-        meta.lore(java.util.List.of(
+        SpigotCompat.itemName(meta, LEGACY.deserialize("§d" + skill.getName() + suffix));
+        SpigotCompat.itemLore(meta, java.util.List.of(
                 Component.text(skill.getDescription() == null ? "" : skill.getDescription(), NamedTextColor.GRAY),
                 Component.text(slotHint(kind), NamedTextColor.DARK_GRAY),
                 Component.text("右键使用", NamedTextColor.DARK_PURPLE)
@@ -812,7 +813,7 @@ public class OperatorService {
         p.sendMessage("§a§l[DFS] 招牌技能已就绪: §f" + name
                 + " §8[" + load.getSignatureCharges() + "/" + load.getSignatureMax() + "]");
         p.playSound(p.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.8f, 1.4f);
-        p.sendActionBar(LEGACY.deserialize("§a✔ " + name + " 充能完成"));
+        SpigotCompat.actionBar(p, LEGACY.deserialize("§a✔ " + name + " 充能完成"));
         writeSignatureSlot(p, load);
     }
 

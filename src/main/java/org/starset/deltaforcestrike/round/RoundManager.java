@@ -24,6 +24,7 @@ import org.starset.deltaforcestrike.shop.ShopGUI;
 import org.starset.deltaforcestrike.util.ArenaCleanup;
 import org.starset.deltaforcestrike.util.ConfigKeys;
 import org.starset.deltaforcestrike.util.InventorySlots;
+import org.starset.deltaforcestrike.util.SpigotCompat;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -316,7 +317,7 @@ public class RoundManager {
                 continue; // 无特殊局势，不弹 Title
             }
 
-            p.showTitle(Title.title(main, sub, times));
+            SpigotCompat.title(p, Title.title(main, sub, times));
             p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.8f, 1.2f);
         }
     }
@@ -585,16 +586,16 @@ public class RoundManager {
         for (Player p : match.onlinePlayers()) {
             PlayerSession s = match.getSession(p.getUniqueId());
             if (s == null || !s.hasTeam()) {
-                p.showTitle(Title.title(
+                SpigotCompat.title(p, Title.title(
                         Component.text("回合结束", NamedTextColor.GOLD, TextDecoration.BOLD),
                         scoreComp, times));
                 continue;
             }
             if (s.getTeam() == winner) {
-                p.showTitle(Title.title(winMain, subtitle, times));
+                SpigotCompat.title(p, Title.title(winMain, subtitle, times));
                 // 胜负音效改由 ClientUI 音乐盒播放，避免与自定义曲冲突
             } else {
-                p.showTitle(Title.title(loseMain, subtitle, times));
+                SpigotCompat.title(p, Title.title(loseMain, subtitle, times));
             }
         }
     }
@@ -645,7 +646,7 @@ public class RoundManager {
     private void actionBarLegacy(String legacyMsg) {
         Component c = LEGACY.deserialize(legacyMsg == null ? "" : legacyMsg);
         for (Player p : match.onlinePlayers()) {
-            p.sendActionBar(c);
+            SpigotCompat.actionBar(p, c);
         }
     }
 

@@ -16,6 +16,7 @@ import org.starset.deltaforcestrike.match.Team;
 import org.starset.deltaforcestrike.round.RoundState;
 import org.starset.deltaforcestrike.util.ConfigKeys;
 import org.starset.deltaforcestrike.util.Worlds;
+import org.starset.deltaforcestrike.util.SpigotCompat;
 
 public class BuyZoneListener implements Listener {
 
@@ -31,7 +32,7 @@ public class BuyZoneListener implements Listener {
     public void onMove(PlayerMoveEvent event) {
         Location to = event.getTo();
         Location from = event.getFrom();
-        // Paper: getTo() 在移动事件中非 null；仍用局部变量避免重复调用
+        // Spigot 移动事件通常带有非 null 的 getTo()，仍用局部变量避免重复调用。
         if (from.getBlockX() == to.getBlockX()
                 && from.getBlockY() == to.getBlockY()
                 && from.getBlockZ() == to.getBlockZ()) {
@@ -67,7 +68,7 @@ public class BuyZoneListener implements Listener {
         event.setTo(new Location(to.getWorld(), nx, to.getY(), nz, to.getYaw(), to.getPitch()));
         player.setVelocity(new Vector(0, 0, 0));
         player.setFallDistance(0f);
-        player.sendActionBar(LEGACY.deserialize("§c购买阶段请留在出生点 §e" + (int) r + " §c格内"));
+        SpigotCompat.actionBar(player, LEGACY.deserialize("§c购买阶段请留在出生点 §e" + (int) r + " §c格内"));
     }
 
     private Location teamSpawn(Team team) {

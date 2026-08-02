@@ -59,7 +59,7 @@ public final class OperatorSelectUI {
         }
 
         OperatorSelectHolder holder = new OperatorSelectHolder();
-        Inventory inv = Bukkit.createInventory(holder, 54, TITLE);
+        Inventory inv = Bukkit.createInventory(holder, 54, SpigotCompat.legacy(TITLE));
         holder.setInventory(inv);
 
         // 玻璃分隔
@@ -123,7 +123,7 @@ public final class OperatorSelectUI {
         if (player == null || def == null) {
             return;
         }
-        player.sendMessage(Component.text("✔ 已选择干员 ", NamedTextColor.GREEN)
+        SpigotCompat.sendMessage(player, Component.text("✔ 已选择干员 ", NamedTextColor.GREEN)
                 .append(Component.text(def.getDisplayName(), NamedTextColor.YELLOW, TextDecoration.BOLD)));
     }
 
@@ -178,7 +178,7 @@ public final class OperatorSelectUI {
             return stack;
         }
         boolean selected = selectedId != null && selectedId.equalsIgnoreCase(def.getId());
-        meta.displayName(LEGACY.deserialize(
+        SpigotCompat.itemName(meta, LEGACY.deserialize(
                 (selected ? "§a✔ " : "§d") + def.getDisplayName()
                         + " §7(" + def.getEnglishName() + ")"));
         List<Component> lore = new ArrayList<>();
@@ -191,7 +191,7 @@ public final class OperatorSelectUI {
         lore.add(Component.empty());
         lore.add(Component.text(selected ? "已选择" : "点击选择",
                 selected ? NamedTextColor.GREEN : NamedTextColor.YELLOW));
-        meta.lore(lore);
+        SpigotCompat.itemLore(meta, lore);
         meta.getPersistentDataContainer().set(
                 ItemKeys.id(), PersistentDataType.STRING, "op_select:" + def.getId());
         stack.setItemMeta(meta);
@@ -229,8 +229,8 @@ public final class OperatorSelectUI {
             case CT -> NamedTextColor.AQUA;
             case null, default -> NamedTextColor.GRAY;
         };
-        meta.displayName(Component.text(p.getName(), NamedTextColor.WHITE));
-        meta.lore(List.of(
+        SpigotCompat.itemName(meta, Component.text(p.getName(), NamedTextColor.WHITE));
+        SpigotCompat.itemLore(meta, List.of(
                 Component.text("队伍: " + team, teamColor),
                 Component.text("干员: " + op, NamedTextColor.LIGHT_PURPLE)
         ));
@@ -241,8 +241,8 @@ public final class OperatorSelectUI {
     private static ItemStack tipItem() {
         ItemStack stack = new ItemStack(Material.BOOK);
         ItemMeta meta = stack.getItemMeta();
-        meta.displayName(Component.text("说明", NamedTextColor.YELLOW));
-        meta.lore(List.of(
+        SpigotCompat.itemName(meta, Component.text("说明", NamedTextColor.YELLOW));
+        SpigotCompat.itemLore(meta, List.of(
                 Component.text("上方点击干员选择", NamedTextColor.GRAY),
                 Component.text("下方为队伍选择情况", NamedTextColor.GRAY),
                 Component.text("全员选完立即开打", NamedTextColor.DARK_GRAY)
@@ -254,7 +254,7 @@ public final class OperatorSelectUI {
     private static ItemStack pane(Material mat, String name) {
         ItemStack stack = new ItemStack(mat);
         ItemMeta meta = stack.getItemMeta();
-        meta.displayName(LEGACY.deserialize(name));
+        SpigotCompat.itemName(meta, LEGACY.deserialize(name));
         stack.setItemMeta(meta);
         return stack;
     }
