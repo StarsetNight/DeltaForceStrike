@@ -7,6 +7,9 @@
 # Gradle build folder
 build
 
+# Maven build folder
+target/
+
 # IntelliJ
 out/
 .idea
