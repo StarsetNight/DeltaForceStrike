@@ -368,14 +368,15 @@ public final class LiveOverlayHtml {
   function phaseLabel(match) {
     if (!match || !match.active) return '等待对局';
     const ms = match.state || '', rs = match.roundState || '';
+    const ot = match.overtime ? '·加时' : '';
     if (ms === 'WAITING') return '队列';
     if (ms === 'COUNTDOWN') return '倒计时';
     if (ms === 'AGENT_SELECT') return '选干员';
-    if (ms === 'ENDING') return '结束';
-    if (rs === 'BUY') return '购买 · R' + (match.round || 0);
-    if (rs === 'COMBAT') return '进攻 · R' + (match.round || 0);
-    if (rs === 'BOMB_PLANTED') return '拆弹 · R' + (match.round || 0);
-    if (rs === 'ROUND_END') return '结算 · R' + (match.round || 0);
+    if (ms === 'ENDING') return '结算';
+    if (rs === 'BUY') return '购买' + ot + ' · R' + (match.round || 0);
+    if (rs === 'COMBAT') return '进攻' + ot + ' · R' + (match.round || 0);
+    if (rs === 'BOMB_PLANTED') return '拆弹' + ot + ' · R' + (match.round || 0);
+    if (rs === 'ROUND_END') return '结算' + ot + ' · R' + (match.round || 0);
     return ms;
   }
 

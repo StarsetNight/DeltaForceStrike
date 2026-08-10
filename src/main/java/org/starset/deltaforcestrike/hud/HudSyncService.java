@@ -5,7 +5,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.starset.deltaforcestrike.DeltaForceStrike;
-import org.starset.deltaforcestrike.bomb.BombManager;
 import org.starset.deltaforcestrike.item.ItemManager;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
@@ -115,8 +114,12 @@ public final class HudSyncService implements PluginMessageListener {
             secondsLeft = fuseLeft;
         }
 
-        int winTarget = plugin.getConfig().getInt("match.win-target", 13);
-        int halfRound = plugin.getConfig().getInt("match.half-round", 12);
+        int winTarget = match.isOvertime()
+                ? match.overtimeWinTarget()
+                : plugin.getConfig().getInt("match.win-target", 13);
+        int halfRound = match.isOvertime()
+                ? plugin.getConfig().getInt("overtime.half-round", 3)
+                : plugin.getConfig().getInt("match.half-round", 12);
         boolean halfSwapped = match.getRoundManager().isHalfTimeSwapped();
 
         // 下包/拆包：同步 active/类型/已进行tick/总tick；进度客户端本地匀速，用 elapsed 校准起点

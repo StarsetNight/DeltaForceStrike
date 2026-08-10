@@ -86,6 +86,10 @@ public class TeamSelectListener implements Listener {
             return;
         }
         String side = raw.substring("team_select:".length());
+        if (side.equalsIgnoreCase("spectate")) {
+            plugin.getMatchManager().joinAsSpectator(player);
+            return;
+        }
         Team team = switch (side.toLowerCase()) {
             case "t" -> Team.T;
             case "ct" -> Team.CT;

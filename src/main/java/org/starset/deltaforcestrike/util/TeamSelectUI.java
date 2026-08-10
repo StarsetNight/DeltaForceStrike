@@ -34,6 +34,7 @@ public final class TeamSelectUI {
 
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
     private static final int SLOT_T = 11;
+    private static final int SLOT_SPECTATE = 13;
     private static final int SLOT_CT = 15;
     private static final int[] ROSTER_SLOTS = {
             28, 29, 30, 31, 32, 33, 34,
@@ -72,6 +73,7 @@ public final class TeamSelectUI {
 
         inv.setItem(SLOT_T, teamButton(Team.T, tCount, cap, self));
         inv.setItem(SLOT_CT, teamButton(Team.CT, ctCount, cap, self));
+        inv.setItem(SLOT_SPECTATE, spectateButton(match.countSpectatorSlots(), self));
 
         int r = 0;
         for (Player p : match.onlinePlayers()) {
@@ -169,6 +171,7 @@ public final class TeamSelectUI {
             PlayerSession self = match.getSession(p.getUniqueId());
             inv.setItem(SLOT_T, teamButton(Team.T, tCount, cap, self));
             inv.setItem(SLOT_CT, teamButton(Team.CT, ctCount, cap, self));
+            inv.setItem(SLOT_SPECTATE, spectateButton(match.countSpectatorSlots(), self));
             for (int slot : ROSTER_SLOTS) {
                 inv.setItem(slot, null);
             }
@@ -210,6 +213,31 @@ public final class TeamSelectUI {
         meta.getPersistentDataContainer().set(
                 ItemKeys.id(), PersistentDataType.STRING,
                 "team_select:" + team.name().toLowerCase());
+        stack.setItemMeta(meta);
+        return stack;
+    }
+
+    /** 观战按钮：点击后以观战模式加入（占房间名额） */
+    private static ItemStack spectateButton(long count, PlayerSession self) {
+        boolean mine = self != null && self.getRole()
+                == org.starset.deltaforcestrike.spectator.SpectatorRole.SPECTATOR;
+        ItemStack stack = new ItemStack(mine ? Material.GREEN_WOOL : Material.GRAY_WOOL);
+        ItemMeta meta = stack.getItemMeta();
+        meta.displayName(Component.text(
+                (mine ? "✔ " : "") + "观战  (" + count + ")",
+                mine ? NamedTextColor.GREEN : NamedTextColor.GRAY,
+                TextDecoration.BOLD));
+        List<Component> lore = new ArrayList<>();
+        lore.add(Component.text("以旁观者身份加入，占房间名额", NamedTextColor.GRAY));
+        if (mine) {
+            lore.add(Component.text("你正在观战", NamedTextColor.GREEN));
+        } else {
+            lore.add(Component.text("点击观战", NamedTextColor.YELLOW));
+        }
+        meta.lore(lore);
+        meta.getPersistentDataContainer().set(
+                ItemKeys.id(), PersistentDataType.STRING,
+                "team_select:spectate");
         stack.setItemMeta(meta);
         return stack;
     }

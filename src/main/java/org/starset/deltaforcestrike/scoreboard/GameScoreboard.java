@@ -184,12 +184,22 @@ public final class GameScoreboard {
 
         set(obj, line--, session.isAlive() ? "§a存活" : "§c阵亡");
 
-        int half = plugin.getConfig().getInt("match.half-round", 4);
         int cr = match.getCurrentRound();
-        if (ms == MatchState.IN_PROGRESS && cr > 0 && cr < half) {
-            set(obj, line, "§8半场: R" + half);
-        } else if (ms == MatchState.IN_PROGRESS && cr >= half) {
-            set(obj, line, "§8下半场");
+        if (ms == MatchState.IN_PROGRESS && cr > 0) {
+            if (match.isOvertime()) {
+                int otHalf = plugin.getConfig().getInt("overtime.half-round", 3);
+                boolean swapped = match.getRoundManager().isHalfTimeSwapped();
+                set(obj, line, "§6加时" + match.getOvertimeCount()
+                        + (swapped ? " 下半场" : " 上半场")
+                        + " §8R" + cr + "/" + otHalf);
+            } else {
+                int half = plugin.getConfig().getInt("match.half-round", 4);
+                if (cr < half) {
+                    set(obj, line, "§8半场: R" + half);
+                } else {
+                    set(obj, line, "§8下半场");
+                }
+            }
         }
     }
 

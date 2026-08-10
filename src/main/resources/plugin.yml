@@ -3,12 +3,12 @@ version: '${version}'
 main: org.starset.deltaforcestrike.DeltaForceStrike
 api-version: '26.2'
 author: 川崎星夕
-description: 友谊之约：反制行动 - 3v3 回合制战术竞技
+description: 友谊之约：反制行动 - 5v5 回合制战术竞技
 
 commands:
   dfs:
     description: DeltaForceStrike 主命令
-    usage: /dfs <join|leave|shop|agent|info|reload|config>
+    usage: /dfs <join|leave|team|shop|guide|info|agent|pause|observer|spectator|start|stop|reload|config|give|setspawn|setsite|techpause|resume|restore|snapshot|setmoney|tournament|overtime>
     aliases: [delta, fp]
     permission: deltaforcestrike.use
 
@@ -16,4 +16,7 @@ permissions:
   deltaforcestrike.use:
     default: true
   deltaforcestrike.admin:
+    default: op
+  deltaforcestrike.observer:
+    description: 允许进入导播模式（不占名额自由观战）
     default: op

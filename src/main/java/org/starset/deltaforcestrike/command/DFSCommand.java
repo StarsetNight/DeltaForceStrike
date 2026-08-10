@@ -1,6 +1,7 @@
 package org.starset.deltaforcestrike.command;
 
 import org.bukkit.Location;
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -13,8 +14,8 @@ import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
-import org.starset.deltaforcestrike.operator.OperatorDefinition;
 import org.starset.deltaforcestrike.shop.ShopGUI;
+import org.starset.deltaforcestrike.spectator.SpectatorRole;
 import org.starset.deltaforcestrike.util.GameGuide;
 import org.starset.deltaforcestrike.util.Worlds;
 
@@ -30,6 +31,10 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> ROOT = List.of(
             "join", "leave", "team", "agent", "info", "shop", "guide",
+            "pause", "techpause", "resume", "restore", "snapshot",
+            "setmoney",
+            "observer", "spectator",
+            "tournament", "overtime",
             "start", "stop", "give", "reload", "config", "setspawn", "setsite", "help"
     );
 
@@ -72,6 +77,16 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             case "give" -> give(sender, args);
             case "setspawn" -> setSpawn(sender, args);
             case "setsite" -> setSite(sender, args);
+            case "pause" -> requestTacticalPause(sender);
+            case "techpause" -> requestTechnicalPause(sender);
+            case "resume" -> resumeMatch(sender);
+            case "restore" -> restoreSnapshot(sender);
+            case "snapshot" -> snapshotInfo(sender);
+            case "setmoney" -> setMoney(sender, args);
+            case "observer" -> asObserver(sender);
+            case "spectator" -> asSpectator(sender);
+            case "tournament" -> tournament(sender, args);
+            case "overtime" -> overtime(sender);
             case "help" -> help(sender);
             default -> sender.sendMessage("§c未知子命令。§7 /dfs help");
         }
@@ -81,8 +96,12 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
     private void help(CommandSender sender) {
         sender.sendMessage("§6§l--- DeltaForceStrike ---");
         sender.sendMessage("§e/dfs join|leave|team|shop|guide|info|agent");
+        sender.sendMessage("§7/dfs pause §8(战术暂停·购买阶段)");
+        sender.sendMessage("§7/dfs observer|spectator|player §8(切换角色)");
         if (sender.hasPermission("deltaforcestrike.admin")) {
             sender.sendMessage("§c/dfs start|stop|reload|config|give|setspawn|setsite");
+            sender.sendMessage("§c/dfs techpause|resume|restore|snapshot");
+            sender.sendMessage("§c/dfs setmoney|tournament|overtime");
             sender.sendMessage("§7/dfs config [key] [value]  §8改队列/赛制并保存");
         }
     }
@@ -476,6 +495,201 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         return false;
     }
 
+    // ==================================================================
+    // 暂停 / 快照 / 设置 / 模式切换
+    // ==================================================================
+
+    private void requestTacticalPause(CommandSender sender) {
+        if (!(sender instanceof Player p)) {
+            sender.sendMessage("§c仅玩家");
+            return;
+        }
+        if (plugin.getPauseService() == null) {
+            p.sendMessage("§c服务未加载");
+            return;
+        }
+        plugin.getPauseService().requestTactical(p);
+    }
+
+    private void requestTechnicalPause(CommandSender sender) {
+        if (!admin(sender)) return;
+        if (plugin.getPauseService() == null) {
+            sender.sendMessage("§c服务未加载");
+            return;
+        }
+        plugin.getPauseService().requestTechnical(sender instanceof Player p ? p : null);
+        // console 用法：找一个在线管理员目标? 简化：支持 sender 是 Player；console 提示用法
+        sender.sendMessage("§a已发起技术暂停 §7(/dfs resume 恢复)");
+    }
+
+    private void resumeMatch(CommandSender sender) {
+        if (!admin(sender)) return;
+        if (plugin.getPauseService() == null || !plugin.getPauseService().isPaused()) {
+            sender.sendMessage("§c当前没有暂停。");
+            return;
+        }
+        plugin.getPauseService().resume("管理员恢复");
+    }
+
+    private void restoreSnapshot(CommandSender sender) {
+        if (!admin(sender)) return;
+        if (plugin.getSnapshotService() == null) {
+            sender.sendMessage("§c快照服务未加载");
+            return;
+        }
+        if (!(sender instanceof Player p)) {
+            // console 允许：直接调用 restore(admin=null)
+            plugin.getSnapshotService().restore(null);
+            return;
+        }
+        plugin.getSnapshotService().restore(p);
+    }
+
+    private void snapshotInfo(CommandSender sender) {
+        if (!admin(sender)) return;
+        var svc = plugin.getSnapshotService();
+        if (svc == null) {
+            sender.sendMessage("§c快照服务未加载");
+            return;
+        }
+        if (!svc.hasSnapshot()) {
+            sender.sendMessage("§7当前无购买阶段快照。");
+            return;
+        }
+        var snap = svc.getSnapshot();
+        sender.sendMessage("§6[DFS] 快照: R" + snap.round
+                + " T " + snap.scoreT + " - " + snap.scoreCT + " CT"
+                + " half=" + snap.halfSwapped
+                + " 买" + snap.buySeconds + "s"
+                + " 玩家=" + snap.players.size());
+    }
+
+    private void setMoney(CommandSender sender, String[] args) {
+        if (!admin(sender)) return;
+        if (args.length < 3) {
+            sender.sendMessage("§c/dfs setmoney <玩家> <金额|+n|-n>");
+            return;
+        }
+        Player target = Bukkit.getPlayerExact(args[1]);
+        if (target == null) {
+            sender.sendMessage("§c玩家不在线: " + args[1]);
+            return;
+        }
+        Match m = plugin.getMatchManager().getMatch();
+        if (m == null || !m.contains(target.getUniqueId())) {
+            sender.sendMessage("§c" + target.getName() + " 不在对局中。");
+            return;
+        }
+        PlayerSession s = m.getSession(target.getUniqueId());
+        String v = args[2];
+        int amt;
+        try {
+            if (v.startsWith("+")) {
+                int cur = s.getMoney();
+                int n = Integer.parseInt(v.substring(1));
+                amt = cur + n;
+            } else if (v.startsWith("-")) {
+                int cur = s.getMoney();
+                int n = Integer.parseInt(v.substring(1));
+                amt = cur - n;
+            } else {
+                amt = Integer.parseInt(v);
+            }
+        } catch (NumberFormatException e) {
+            sender.sendMessage("§c金额须为整数");
+            return;
+        }
+        if (amt < 0) amt = 0;
+        int cap = plugin.getConfig().getInt("economy.max-money", 16000);
+        if (amt > cap) amt = cap;
+        s.setMoney(amt);
+        sender.sendMessage("§a[DFS] §f" + target.getName() + " §7金钱: §e$" + s.getMoney());
+        target.sendMessage("§6[DFS] 管理员设置你的金钱为 §e$" + s.getMoney());
+    }
+
+    private void asObserver(CommandSender sender) {
+        if (!(sender instanceof Player p)) {
+            sender.sendMessage("§c仅玩家");
+            return;
+        }
+        if (!admin(sender) && !p.hasPermission("deltaforcestrike.observer")) {
+            p.sendMessage("§c无权限 §7(deltaforcestrike.observer)");
+            return;
+        }
+        if (!Worlds.isArena(p)) {
+            p.sendMessage("§c只能在竞技世界使用");
+            return;
+        }
+        if (plugin.getMatchManager().getMatch() == null
+                || !plugin.getMatchManager().getMatch().contains(p.getUniqueId())) {
+            plugin.getMatchManager().joinAsObserver(p);
+        } else {
+            plugin.getSpectatorRoleManager().setRole(p, SpectatorRole.OBSERVER);
+        }
+    }
+
+    private void asSpectator(CommandSender sender) {
+        if (!(sender instanceof Player p)) {
+            sender.sendMessage("§c仅玩家");
+            return;
+        }
+        if (!Worlds.isArena(p)) {
+            p.sendMessage("§c只能在竞技世界使用");
+            return;
+        }
+        if (plugin.getMatchManager().getMatch() == null
+                || !plugin.getMatchManager().getMatch().contains(p.getUniqueId())) {
+            plugin.getMatchManager().joinAsSpectator(p);
+        } else {
+            plugin.getSpectatorRoleManager().setRole(p, SpectatorRole.SPECTATOR);
+        }
+    }
+
+    private void tournament(CommandSender sender, String[] args) {
+        if (!admin(sender)) return;
+        if (plugin.getTournamentService() == null) {
+            sender.sendMessage("§c赛事服务未加载");
+            return;
+        }
+        if (args.length < 2) {
+            var svc = plugin.getTournamentService();
+            sender.sendMessage("§6[DFS] 赛事模式: §e" + (svc.isEnabled() ? "§aON" : "§cOFF"));
+            sender.sendMessage("§7/dfs tournament <on|off>");
+            if (svc.isEnabled()) {
+                sender.sendMessage("§7超时: §f"
+                        + plugin.getConfig().getInt("tournament.timeout-seconds", 10) + "s");
+                sender.sendMessage("§7已握手玩家: §f" + svc.verifiedCount());
+            }
+            return;
+        }
+        String v = args[1].toLowerCase(Locale.ROOT);
+        switch (v) {
+            case "on", "true", "enable" -> {
+                plugin.getConfig().set("tournament.enabled", true);
+                plugin.saveConfig();
+                plugin.getTournamentService().sweep();
+                sender.sendMessage("§a[DFS] 赛事模式已启用 §7(未握手玩家将在 "
+                        + plugin.getConfig().getInt("tournament.timeout-seconds", 10)
+                        + "s 后被踢出)");
+            }
+            case "off", "false", "disable" -> {
+                plugin.getConfig().set("tournament.enabled", false);
+                plugin.saveConfig();
+                sender.sendMessage("§c[DFS] 赛事模式已关闭");
+            }
+            default -> sender.sendMessage("§c/dfs tournament <on|off>");
+        }
+    }
+
+    private void overtime(CommandSender sender) {
+        if (!admin(sender)) return;
+        Player admin = sender instanceof Player p ? p : null;
+        boolean ok = plugin.getMatchManager().enterOvertimeFromEndWindow(admin);
+        if (!ok && admin == null) {
+            sender.sendMessage("§c当前不在平局结算窗口内，无法进入加时。");
+        }
+    }
+
     private Team parseTeam(String raw) {
         return switch (raw.toLowerCase(Locale.ROOT)) {
             case "t", "atk", "attack" -> Team.T;
@@ -493,7 +707,9 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             Stream<String> stream = ROOT.stream();
             if (!sender.hasPermission("deltaforcestrike.admin")) {
                 stream = stream.filter(s -> !List.of(
-                        "start", "stop", "reload", "config", "give", "setspawn", "setsite"
+                        "start", "stop", "reload", "config", "give", "setspawn", "setsite",
+                        "techpause", "resume", "restore", "snapshot",
+                        "setmoney", "tournament", "overtime"
                 ).contains(s));
             }
             return filter(stream.collect(Collectors.toList()), args[0]);
@@ -508,6 +724,9 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
                 case "setsite" -> filter(List.of("a", "b"), args[1]);
                 case "config", "cfg", "set" -> filter(CONFIG_KEYS, args[1]);
                 case "give" -> filter(new ArrayList<>(plugin.getItemManager().getAll().keySet()), args[1]);
+                case "tournament" -> filter(List.of("on", "off"), args[1]);
+                case "setmoney" -> filter(Bukkit.getOnlinePlayers().stream()
+                        .map(Player::getName).toList(), args[1]);
                 default -> List.of();
             };
         }
@@ -518,6 +737,13 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
                 return filter(List.of("true", "false"), args[2]);
             }
             return filter(List.of("1", "2", "3", "4", "5", "6", "8", "10", "12", "16"), args[2]);
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("setscore")) {
+            return filter(List.of("0", "1", "2", "3", "5", "6", "8", "10", "12", "13", "16"), args[2]);
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("setmoney")) {
+            return filter(List.of("0", "800", "1000", "2000", "4000", "8000", "16000",
+                    "+300", "-300"), args[2]);
         }
         return List.of();
     }

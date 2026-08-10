@@ -31,6 +31,13 @@ public class MatchManager {
     private BukkitTask agentTask;
     private int agentLeft;
 
+    /** 结算窗口：比赛结束后标题持续展示，等待 /dfs overtime 或超时判结束 */
+    private BukkitTask endWindowTask;
+    private int endWindowLeft;
+    private boolean endWindowActive;
+    /** 最终结束流程是否已启动（防 forceEnd 重复执行） */
+    private boolean endScheduled;
+
     private static final long END_RESET_DELAY_TICKS = 70L;
 
     public MatchManager(DeltaForceStrike plugin) {
@@ -41,6 +48,12 @@ public class MatchManager {
     private void resetMatchWaiting() {
         if (match != null) {
             match.getRoundManager().shutdown();
+        }
+        endWindowActive = false;
+        endScheduled = false;
+        if (endWindowTask != null) {
+            endWindowTask.cancel();
+            endWindowTask = null;
         }
         match = new Match(plugin);
         match.setState(MatchState.WAITING);
@@ -120,13 +133,16 @@ public class MatchManager {
         }
 
         int max = ConfigKeys.maxPlayers();
-        if (match.isFull(max)) {
-            player.sendMessage("§c[DFS] 队列已满（" + max + "），已将你传送至队列区。");
+        // 导播不占名额；占名额 = 参赛 + 旁观
+        if (match.occupiedSlots() >= max) {
+            player.sendMessage("§c[DFS] 房间已满（占名额 " + match.occupiedSlots() + "/" + max
+                    + "），已将你传送至队列区。");
             return false;
         }
 
         int startMoney = plugin.getConfig().getInt("economy.start-money", 800);
-        match.getSessions().put(player.getUniqueId(), new PlayerSession(player, startMoney));
+        var session = new PlayerSession(player, startMoney);
+        match.getSessions().put(player.getUniqueId(), session);
 
         prepareQueuePlayer(player);
 
@@ -440,11 +456,77 @@ public class MatchManager {
         if (match == null || match.getState() != MatchState.WAITING) {
             return;
         }
-        if (match.size() >= ConfigKeys.maxPlayers()) {
+        // 仅看占名额的参赛选手是否达到上限
+        if (match.playingCount() >= ConfigKeys.maxPlayers()) {
             startCountdown();
         }
     }
 
+    /** 加入旁观者（占房间名额：spectator + T + CT = max）。仅对局中可用。 */
+    public boolean joinAsSpectator(Player player) {
+        if (player == null) return false;
+        if (!Worlds.isArena(player)) {
+            player.sendMessage("§c[DFS] 只能在竞技世界旁观。");
+            return false;
+        }
+        if (match == null) {
+            resetMatchWaiting();
+        }
+        if (match.contains(player.getUniqueId())) {
+            return setRoleAndApply(player,
+                    org.starset.deltaforcestrike.spectator.SpectatorRole.SPECTATOR);
+        }
+        int max = ConfigKeys.maxPlayers();
+        if (match.occupiedSlots() >= max) {
+            player.sendMessage("§c[DFS] 房间已满（占名额 " + max + "）。");
+            parkAtQueue(player, true);
+            return false;
+        }
+        int startMoney = 0;
+        var session = new PlayerSession(player, startMoney);
+        session.setRole(org.starset.deltaforcestrike.spectator.SpectatorRole.SPECTATOR);
+        session.setAlive(false);
+        match.getSessions().put(player.getUniqueId(), session);
+        if (plugin.getSpectatorRoleManager() != null) {
+            plugin.getSpectatorRoleManager().applyRole(player);
+        }
+        safeScoreboardCreate(player);
+        safeTabUpdate(player);
+        match.broadcast("§7[DFS] §f" + player.getName() + " §7以观战模式加入。"
+                + " §8(占名额 " + match.occupiedSlots() + "/" + max + ")");
+        return true;
+    }
+
+    /** 加入导播（不占任何名额）。仅对局中可用，管理员/导播权限。 */
+    public boolean joinAsObserver(Player player) {
+        if (player == null) return false;
+        if (!Worlds.isArena(player)) {
+            player.sendMessage("§c[DFS] 只能在竞技世界导播。");
+            return false;
+        }
+        if (match == null) {
+            resetMatchWaiting();
+        }
+        if (match.contains(player.getUniqueId())) {
+            return setRoleAndApply(player,
+                    org.starset.deltaforcestrike.spectator.SpectatorRole.OBSERVER);
+        }
+        var session = new PlayerSession(player, 0);
+        session.setRole(org.starset.deltaforcestrike.spectator.SpectatorRole.OBSERVER);
+        session.setAlive(false);
+        match.getSessions().put(player.getUniqueId(), session);
+        if (plugin.getSpectatorRoleManager() != null) {
+            plugin.getSpectatorRoleManager().applyRole(player);
+        }
+        match.broadcast("§b[DFS] §f" + player.getName() + " §b以导播模式加入。§7(不占名额)");
+        return true;
+    }
+
+    private boolean setRoleAndApply(Player player,
+                                     org.starset.deltaforcestrike.spectator.SpectatorRole role) {
+        if (plugin.getSpectatorRoleManager() == null) return false;
+        return plugin.getSpectatorRoleManager().setRole(player, role);
+    }
     public void forceStartCountdown() {
         if (match == null) {
             resetMatchWaiting();
@@ -488,11 +570,11 @@ public class MatchManager {
                 return;
             }
             if (plugin.getConfig().getBoolean("queue.cancel-if-not-full", true)
-                    && match.size() < ConfigKeys.maxPlayers()) {
+                    && match.occupiedSlots() < ConfigKeys.maxPlayers()) {
                 cancelCountdown("有人离开或人数不足，倒计时取消。");
                 return;
             }
-            if (match.size() < 1) {
+            if (match.occupiedSlots() < 1) {
                 cancelCountdown("队列为空，倒计时取消。");
                 return;
             }
@@ -735,6 +817,15 @@ public class MatchManager {
         if (self == null) {
             return false;
         }
+        // 选择 T/CT 即视为参赛选手（从观战/导播切回）
+        if (!self.isPlaying()) {
+            self.setRole(org.starset.deltaforcestrike.spectator.SpectatorRole.PLAYING);
+            self.setAlive(true);
+            player.sendMessage("§a[DFS] 你已切换为参赛选手。");
+            if (plugin.getSpectatorRoleManager() != null) {
+                plugin.getSpectatorRoleManager().clear(player);
+            }
+        }
         if (self.getTeam() == team) {
             player.sendMessage("§7你已在该队伍。");
             TeamSelectUI.sendSelected(player, team);
@@ -824,6 +915,17 @@ public class MatchManager {
 
         match.setState(MatchState.IN_PROGRESS);
         match.setCurrentRound(0);
+        // 新对局：清掉暂停次数、快照、加时状态、半场换边标记
+        if (plugin.getPauseService() != null) {
+            plugin.getPauseService().resetForNewMatch();
+        }
+        if (plugin.getSnapshotService() != null) {
+            plugin.getSnapshotService().clear();
+        }
+        match.getRoundManager().resetForNewMatch();
+        match.setOvertime(false);
+        match.setOvertimeCount(0);
+        match.setOvertimeBaseScore(0);
         match.broadcast("§a§l[DFS] 对局开始！");
         match.broadcast("§e提示: T 包点下包 · CT 潜行拆包 · §a/dfs guide §e· §a/dfs shop");
 
@@ -840,7 +942,12 @@ public class MatchManager {
         match.getRoundManager().startNextRound();
     }
 
-    public void forceEnd(String reason) {
+    /**
+     * 比赛自然结束 → 进入结算窗口。
+     * 标题持续显示 end-window-seconds 秒；若平局则等待 /dfs overtime 进入加时，
+     * 超时未处理则判比赛结束（回队列）。
+     */
+    public void enterEndWindow(String reason) {
         cancelTasks();
         if (match == null) {
             return;
@@ -853,6 +960,149 @@ public class MatchManager {
         match.getRoundManager().shutdown();
         if (plugin.getBombManager() != null) {
             plugin.getBombManager().reset();
+        }
+        if (plugin.getPauseService() != null) {
+            plugin.getPauseService().cancelActive();
+        }
+        if (plugin.getSnapshotService() != null) {
+            plugin.getSnapshotService().clear();
+        }
+        ArenaCleanup.clearDrops();
+
+        final int finalT = match.getScoreT();
+        final int finalCT = match.getScoreCT();
+        final boolean isDraw = finalT == finalCT;
+        final String reasonText = reason == null ? "" : reason;
+
+        showMatchEndTitles(finalT, finalCT);
+        match.broadcast("§c[DFS] 对局结束: §f" + reasonText);
+        match.broadcast("§6最终比分 §cT " + finalT + " §7- §b" + finalCT + " CT");
+
+        if (isDraw) {
+            match.broadcast("§e[DFS] 平局！管理员可在结算窗口内输入 §a/dfs overtime §e进入加时赛。");
+        }
+
+        endWindowActive = true;
+        endWindowLeft = Math.max(5, plugin.getConfig().getInt("match.end-window-seconds", 30));
+        match.broadcast("§7结算窗口 §f" + endWindowLeft + "s §7后自动结束"
+                + (isDraw ? "（超时判本场结束，不回放加时）" : ""));
+
+        // 每 5 秒重发标题，保证始终显示
+        endWindowTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (!endWindowActive || match == null) {
+                return;
+            }
+            showMatchEndTitles(match.getScoreT(), match.getScoreCT());
+            endWindowLeft -= 5;
+            if (endWindowLeft <= 0) {
+                forceEnd(isDraw ? "平局结算窗口超时，本场结束" : reasonText);
+            }
+        }, 100L, 100L);
+    }
+
+    /** 管理员 /dfs overtime：平局结算窗口内进入加时赛（比分继承正赛） */
+    public boolean enterOvertimeFromEndWindow(Player admin) {
+        if (match == null || !endWindowActive || match.getState() != MatchState.ENDING) {
+            if (admin != null) {
+                admin.sendMessage("§c[DFS] 当前不在结算窗口内。");
+            }
+            return false;
+        }
+        if (match.getScoreT() != match.getScoreCT()) {
+            if (admin != null) {
+                admin.sendMessage("§c[DFS] 只有平局才能进入加时赛。");
+            }
+            return false;
+        }
+        // 取消结算窗口
+        endWindowActive = false;
+        if (endWindowTask != null) {
+            endWindowTask.cancel();
+            endWindowTask = null;
+        }
+
+        match.enterOvertime(); // 设置 overtime + PauseService 重置
+        match.setOvertimeCount(match.getOvertimeCount() + 1);
+        // 加时赛胜场目标 = 当前比分基准 + overtime.win-target（比分继承）
+        match.setOvertimeBaseScore(match.getScoreT()); // 平局 T==CT，取任一即可
+
+        // 比分继承，经济按配置重置（新开一把）
+        boolean resetEco = plugin.getConfig().getBoolean("overtime.reset-economy", true);
+        int otMoney = plugin.getConfig().getInt("overtime.start-money", 10000);
+        for (PlayerSession s : match.getSessions().values()) {
+            if (resetEco) {
+                s.setMoney(otMoney);
+                s.setConsecutiveLosses(0);
+            }
+            s.setAlive(true);
+            s.resetDeathCounted();
+        }
+        if (plugin.getSnapshotService() != null) {
+            plugin.getSnapshotService().clear();
+        }
+        if (plugin.getBombManager() != null) {
+            plugin.getBombManager().reset();
+        }
+        if (plugin.getOperatorService() != null
+                && plugin.getConfig().getBoolean("operator.enabled", true)) {
+            plugin.getOperatorService().prepareMatch(match);
+        }
+
+        match.setCurrentRound(0);
+        match.setState(MatchState.IN_PROGRESS);
+        // 加时赛重新开始半场换边流程（前 overtime.half-round 回合为加时上半场）
+        match.getRoundManager().resetHalfTimeForOvertime();
+        int otWin = plugin.getConfig().getInt("overtime.win-target", 4);
+        int otHalf = plugin.getConfig().getInt("overtime.half-round", 3);
+        int otTarget = match.overtimeWinTarget();
+        int otCount = match.getOvertimeCount();
+        match.broadcast("§6§l[DFS] 加时赛 #" + otCount + " 开始！比分继承正赛，先到 §e"
+                + otTarget + " §6胜获胜（加时再赢 §e" + otWin + " §6场，"
+                + otHalf + " 回合换边）");
+        match.broadcast("§7当前比分 §cT " + match.getScoreT()
+                + " §7- §b" + match.getScoreCT() + " CT");
+
+        safeScoreboardUpdateAll();
+        safeTabUpdateAll();
+        match.getRoundManager().startNextRound();
+        return true;
+    }
+
+    /** 是否处于结算窗口（供命令限制用） */
+    public boolean isInEndWindow() {
+        return endWindowActive && match != null && match.getState() == MatchState.ENDING;
+    }
+
+    public void forceEnd(String reason) {
+        if (match == null) {
+            return;
+        }
+        if (endScheduled) {
+            return;
+        }
+        endScheduled = true;
+        cancelTasks();
+        cancelEndWindow();
+
+        // 若在下半场被 stop 结束：把比赛情况重置到上半场（比分对调回），
+        // 避免最终比分展示为换边后口径、且下一场残留下半场标记
+        if (match.getRoundManager().isHalfTimeSwapped() && !match.isOvertime()) {
+            match.swapScores();
+            if (reason == null || reason.isEmpty()) {
+                reason = "比赛重置到上半场后结束";
+            }
+        }
+
+        match.setState(MatchState.ENDING);
+        match.getRoundManager().shutdown();
+        if (plugin.getBombManager() != null) {
+            plugin.getBombManager().reset();
+        }
+        if (plugin.getPauseService() != null) {
+            plugin.getPauseService().cancelActive();
+        }
+        if (plugin.getSnapshotService() != null) {
+            plugin.getSnapshotService().clear();
         }
         ArenaCleanup.clearDrops();
 
@@ -900,6 +1150,14 @@ public class MatchManager {
                 }
             }
         }, Math.max(20L, delay));
+    }
+
+    private void cancelEndWindow() {
+        endWindowActive = false;
+        if (endWindowTask != null) {
+            endWindowTask.cancel();
+            endWindowTask = null;
+        }
     }
 
     private void showMatchEndTitles(int scoreT, int scoreCT) {
@@ -1147,6 +1405,7 @@ public class MatchManager {
 
     public void shutdown() {
         cancelTasks();
+        cancelEndWindow();
         safeScoreboardRemoveAll();
         if (plugin.getBombManager() != null) {
             plugin.getBombManager().reset();

@@ -5,10 +5,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.title.Title;
-import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
-import org.bukkit.Material;
-import org.bukkit.Sound;
+import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -63,9 +60,9 @@ public class RoundManager {
     }
 
     public void startNextRound() {
-        int winTarget = plugin.getConfig().getInt("match.win-target", 5);
-        int maxRounds = plugin.getConfig().getInt("match.max-rounds", 8);
-        int halfRound = plugin.getConfig().getInt("match.half-round", 4);
+        int winTarget = winTarget();
+        int maxRounds = maxRounds();
+        int halfRound = halfRound();
 
         if (match.getScoreT() >= winTarget
                 || match.getScoreCT() >= winTarget
@@ -91,9 +88,53 @@ public class RoundManager {
         startBuyPhase();
     }
 
+    /** 加时赛用 overtime.* 配置；普通比赛用 match.* */
+    private int winTarget() {
+        if (match.isOvertime()) {
+            return match.overtimeWinTarget();
+        }
+        return plugin.getConfig().getInt("match.win-target", 13);
+    }
+
+    private int maxRounds() {
+        return plugin.getConfig().getInt(match.isOvertime() ? "overtime.max-rounds" : "match.max-rounds",
+                match.isOvertime() ? 6 : 24);
+    }
+
+    private int halfRound() {
+        return plugin.getConfig().getInt(match.isOvertime() ? "overtime.half-round" : "match.half-round",
+                match.isOvertime() ? 3 : 12);
+    }
+
+    /** 加时赛换边后结算显示用 */
+    public String formatWinTarget() {
+        return winTarget() + " 胜";
+    }
+
+    /** 进入加时赛：重置半场换边标记，让加时按 overtime.half-round 重新换边 */
+    public void resetHalfTimeForOvertime() {
+        halfTimeSwapped = false;
+        buySituationTitleShown = false;
+    }
+
+    /** 新对局/结束后彻底重置阶段状态，避免残留到下一场（如上半场/下半场标记） */
+    public void resetForNewMatch() {
+        cancel();
+        state = RoundState.IDLE;
+        secondsLeft = 0;
+        halfTimeSwapped = false;
+        buySituationTitleShown = false;
+    }
+
     private void doHalfTimeSwap(int halfRound) {
         halfTimeSwapped = true;
-        int startMoney = plugin.getConfig().getInt("economy.start-money", 800);
+        if (plugin.getSnapshotService() != null) {
+            plugin.getSnapshotService().clear();
+        }
+        // 加时赛换边经济重置为 overtime.start-money；普通比赛用 economy.start-money
+        int startMoney = match.isOvertime()
+                ? plugin.getConfig().getInt("overtime.start-money", 10000)
+                : plugin.getConfig().getInt("economy.start-money", 800);
 
         for (PlayerSession s : match.getSessions().values()) {
             if (s.getTeam() == Team.T) {
@@ -140,7 +181,8 @@ public class RoundManager {
         buySituationTitleShown = false;
 
         broadcastLegacy("§e[DFS] 第 §f" + match.getCurrentRound()
-                + " §e回合 · 购买阶段 §f" + secondsLeft + "s");
+                + " §e回合 · 购买阶段 §f" + secondsLeft + "s"
+                + " §8| §7/dfs pause §8战术暂停");
 
         ItemGiveService give = plugin.getItemGiveService();
         ItemManager items = plugin.getItemManager();
@@ -177,6 +219,23 @@ public class RoundManager {
                 && plugin.getConfig().getBoolean("operator.enabled", true)) {
             plugin.getOperatorService().onRoundStart(match);
         }
+
+        // 通知观战/导播角色本回合开始
+        if (plugin.getSpectatorRoleManager() != null) {
+            plugin.getSpectatorRoleManager().onRoundStart();
+        }
+
+        // 通知 PauseService 新回合开始：清掉之前的暂停状态
+        if (plugin.getPauseService() != null) {
+            plugin.getPauseService().resetRound();
+        }
+
+        // 拍快照（onRoundStart 之后，确保干员技能充能状态在快照中）
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (state == RoundState.BUY && plugin.getSnapshotService() != null) {
+                plugin.getSnapshotService().captureAtBuyStart();
+            }
+        }, 2L);
 
         refreshUi();
 
@@ -221,14 +280,20 @@ public class RoundManager {
                 cancel();
                 return;
             }
+            // 暂停期间冻结计时
+            if (plugin.getPauseService() != null && plugin.getPauseService().isPaused()) {
+                match.broadcastActionBar("§6⏸ " + plugin.getPauseService().statusLine()
+                        + " §7| §e购买阶段 §f" + secondsLeft + "s");
+                return;
+            }
             for (Player p : match.onlinePlayers()) {
                 PlayerSession s = match.getSession(p.getUniqueId());
-                if (s != null && s.hasTeam() && s.isAlive()
+                if (s != null && s.isPlaying() && s.hasTeam() && s.isAlive()
                         && p.getGameMode() == GameMode.SPECTATOR) {
                     forceExitSpectator(p);
                 }
             }
-            actionBarLegacy("§e购买阶段 §f" + secondsLeft + "s §7| §a/dfs shop");
+            actionBarLegacy("§e购买阶段 §f" + secondsLeft + "s §7| §a/dfs shop §7| §a/dfs pause §8战术暂停");
             if (secondsLeft <= 0) {
                 startCombatPhase();
                 return;
@@ -245,13 +310,156 @@ public class RoundManager {
         }, 0L, 20L);
     }
 
+    /** 暂停恢复后继续购买阶段 */
+    public void resumeBuy() {
+        if (state != RoundState.BUY) {
+            return;
+        }
+        broadcastLegacy("§a[DFS] 购买阶段继续 §f" + secondsLeft + "s");
+    }
+
+    /** 回滚到本回合购买阶段快照 */
+    public void restartBuyFromSnapshot() {
+        var snap = plugin.getSnapshotService() == null
+                ? null : plugin.getSnapshotService().getSnapshot();
+        if (snap == null) {
+            return;
+        }
+        cancel();
+        ArenaCleanup.clearDrops();
+        if (plugin.getBombManager() != null) {
+            plugin.getBombManager().reset();
+        }
+        state = RoundState.BUY;
+        secondsLeft = Math.max(1, snap.buySeconds);
+        buySituationTitleShown = false;
+
+        for (Player p : match.onlinePlayers()) {
+            PlayerSession s = match.getSession(p.getUniqueId());
+            if (s == null) continue;
+
+            // 观战/导播：跳过还原，重新进入旁观
+            if (!s.isPlaying()) {
+                if (plugin.getSpectatorRoleManager() != null) {
+                    plugin.getSpectatorRoleManager().applyRole(p);
+                }
+                continue;
+            }
+
+            // 还原 session 状态
+            var snap_entry = snap.players.get(p.getUniqueId());
+            if (snap_entry == null) continue;
+            s.setMoney(snap_entry.money);
+            s.setConsecutiveLosses(snap_entry.consecutiveLosses);
+            s.setAlive(snap_entry.alive);
+            s.setConnected(true);
+            s.setOperatorId(snap_entry.operatorId);
+            s.setDeathCounted(snap_entry.deathCounted);
+
+            forceExitSpectator(p);
+            p.setInvulnerable(false);
+            p.setFallDistance(0f);
+            // 安全恢复血量：MAX_HEALTH 属性可能为 null（1.11+ 弃用 getMaxHealth()），
+            // 用属性接口判空兜底，并钳制在有效范围
+            double maxHp = 20.0;
+            try {
+                var attr = p.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH);
+                if (attr != null) {
+                    maxHp = Math.max(1.0, attr.getValue());
+                }
+            } catch (Throwable ignored) {
+            }
+            double hp = snap_entry.health;
+            if (Double.isNaN(hp) || hp < 0) {
+                hp = 0;
+            } else if (hp > maxHp) {
+                hp = maxHp;
+            }
+            p.setHealth(hp);
+            p.setFoodLevel(snap_entry.food);
+            try { p.setSaturation(snap_entry.saturation); } catch (Throwable ignored) {}
+            for (var pe : p.getActivePotionEffects()) p.removePotionEffect(pe.getType());
+            if (snap_entry.potionEffects != null) {
+                for (var e : snap_entry.potionEffects) p.addPotionEffect(e);
+            }
+            p.getInventory().setContents(snap_entry.contents);
+            p.getInventory().setArmorContents(snap_entry.armor);
+            p.getInventory().setItemInOffHand(snap_entry.offHand);
+            try { p.getInventory().setHeldItemSlot(snap_entry.heldSlot); } catch (Throwable ignored) {}
+
+            if (snap_entry.world != null
+                    && snap_entry.world.equalsIgnoreCase(
+                            p.getWorld() == null ? "" : p.getWorld().getName())) {
+                Location spawn = s.hasTeam()
+                        ? ConfigKeys.readLocation(s.getTeam() == Team.T
+                                ? "locations.team-t-spawn" : "locations.team-ct-spawn")
+                        : ConfigKeys.readLocation("locations.queue-spawn");
+                if (spawn != null) {
+                    p.setFallDistance(0f);
+                    p.teleport(spawn);
+                    p.setFallDistance(0f);
+                }
+            }
+            p.sendMessage("§6[DFS] 已回滚到购买阶段快照 §7($" + s.getMoney() + ")");
+        }
+        ArenaCleanup.clearDrops();
+        if (plugin.getOperatorService() != null
+                && plugin.getConfig().getBoolean("operator.enabled", true)) {
+            plugin.getOperatorService().onRoundStart(match);
+        }
+        refreshUi();
+
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (state != RoundState.BUY) return;
+            for (Player p : match.onlinePlayers()) {
+                PlayerSession s = match.getSession(p.getUniqueId());
+                if (s != null && s.isPlaying() && s.isAlive()) {
+                    forceExitSpectator(p);
+                    ShopGUI.open(p);
+                }
+            }
+        });
+
+        task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (state != RoundState.BUY) {
+                cancel();
+                return;
+            }
+            if (plugin.getPauseService() != null && plugin.getPauseService().isPaused()) {
+                match.broadcastActionBar("§6⏸ " + plugin.getPauseService().statusLine()
+                        + " §7| §e购买阶段 §f" + secondsLeft + "s");
+                return;
+            }
+            for (Player p : match.onlinePlayers()) {
+                PlayerSession s = match.getSession(p.getUniqueId());
+                if (s != null && s.isPlaying() && s.hasTeam() && s.isAlive()
+                        && p.getGameMode() == GameMode.SPECTATOR) {
+                    forceExitSpectator(p);
+                }
+            }
+            actionBarLegacy("§e购买阶段 §f" + secondsLeft + "s §7| §a/dfs shop §7| §a/dfs pause §8战术暂停");
+            if (secondsLeft <= 0) {
+                startCombatPhase();
+                return;
+            }
+            if (secondsLeft == 5 && !buySituationTitleShown) {
+                buySituationTitleShown = true;
+                showBuyPhaseSituationTitles();
+            }
+            if (secondsLeft <= 5) {
+                broadcastLegacy("§e购买阶段剩余 §c" + secondsLeft + "s");
+            }
+            refreshUi();
+            secondsLeft--;
+        }, 0L, 20L);
+    }
     /**
      * 购买阶段剩 5 秒：局势 Title。
      * 优先级：决胜局 &gt; 赛点 &gt; 上半场最终局 &gt; 半场手枪局（攻/防视角）
      */
     private void showBuyPhaseSituationTitles() {
-        int winTarget = plugin.getConfig().getInt("match.win-target", 5);
-        int halfRound = plugin.getConfig().getInt("match.half-round", 4);
+        int winTarget = winTarget();
+        int halfRound = halfRound();
         int round = match.getCurrentRound();
         int scoreT = match.getScoreT();
         int scoreCT = match.getScoreCT();
@@ -639,7 +847,8 @@ public class RoundManager {
         } else {
             msg = "平局！最终 " + match.getScoreT() + "-" + match.getScoreCT();
         }
-        plugin.getMatchManager().forceEnd(msg);
+        // 交给 MatchManager 进入结算窗口：平局等待 /dfs overtime，超时自动判结束
+        plugin.getMatchManager().enterEndWindow(msg);
     }
 
     private void actionBarLegacy(String legacyMsg) {

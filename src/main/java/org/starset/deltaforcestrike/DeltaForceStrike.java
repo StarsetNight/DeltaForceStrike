@@ -59,11 +59,15 @@ public final class DeltaForceStrike extends JavaPlugin {
     private GrenadeService grenadeService;
     private OperatorService operatorService;
     private SpectatorLockService spectatorLockService;
+    private org.starset.deltaforcestrike.spectator.SpectatorRoleManager spectatorRoleManager;
     private InventoryLockListener inventoryLockListener;
     private HudSyncService hudSyncService;
     private LiveSnapshotService liveSnapshotService;
     private LiveKillFeedService liveKillFeedService;
     private LiveHttpServer liveHttpServer;
+    private org.starset.deltaforcestrike.pause.PauseService pauseService;
+    private org.starset.deltaforcestrike.pause.SnapshotService snapshotService;
+    private org.starset.deltaforcestrike.tournament.TournamentService tournamentService;
 
     @Override
     public void onEnable() {
@@ -94,8 +98,13 @@ public final class DeltaForceStrike extends JavaPlugin {
         tabListService = new TabListService(this);
         nametagService = new NametagService(this);
         spectatorLockService = new SpectatorLockService(this);
+        spectatorRoleManager = new org.starset.deltaforcestrike.spectator.SpectatorRoleManager(this);
         hudSyncService = new HudSyncService(this);
         hudSyncService.register();
+
+        pauseService = new org.starset.deltaforcestrike.pause.PauseService(this);
+        snapshotService = new org.starset.deltaforcestrike.pause.SnapshotService(this);
+        tournamentService = new org.starset.deltaforcestrike.tournament.TournamentService(this);
 
         liveKillFeedService = new LiveKillFeedService();
         liveSnapshotService = new LiveSnapshotService(this);
@@ -133,6 +142,16 @@ public final class DeltaForceStrike extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new SpectatorLockListener(this, spectatorLockService), this);
 
+        // 赛事模式握手通道
+        org.starset.deltaforcestrike.listener.TournamentListener tListener =
+                new org.starset.deltaforcestrike.listener.TournamentListener(this);
+        getServer().getPluginManager().registerEvents(tListener, this);
+        getServer().getMessenger().registerOutgoingPluginChannel(this,
+                org.starset.deltaforcestrike.tournament.TournamentService.CHANNEL);
+        getServer().getMessenger().registerIncomingPluginChannel(this,
+                org.starset.deltaforcestrike.tournament.TournamentService.CHANNEL,
+                tListener);
+
         // ---------- 定时任务 ----------
         // 物品栏清扫（仅竞技世界内在局玩家）
         getServer().getScheduler().runTaskTimer(this, () -> {
@@ -163,6 +182,17 @@ public final class DeltaForceStrike extends JavaPlugin {
 
         // 旁观锁友方
         getServer().getScheduler().runTaskTimer(this, spectatorLockService::tickAll, 20L, 10L);
+
+        // 观战/导播角色 tick
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            if (spectatorRoleManager != null) {
+                spectatorRoleManager.tick();
+            }
+        }, 20L, 10L);
+        // 赛事模式扫荡未握手玩家
+        if (tournamentService.isEnabled()) {
+            tournamentService.sweep();
+        }
 
         // 干员被动 / 充能 / 烟幕等
         getServer().getScheduler().runTaskTimer(this, () -> {
@@ -203,6 +233,15 @@ public final class DeltaForceStrike extends JavaPlugin {
         }
         if (gameManager != null) {
             gameManager.shutdown();
+        }
+        if (pauseService != null) {
+            pauseService.cancelActive();
+        }
+        if (snapshotService != null) {
+            snapshotService.onDisable();
+        }
+        if (tournamentService != null) {
+            tournamentService.clearAll();
         }
         getLogger().info("DeltaForceStrike 已关闭");
     }
@@ -300,5 +339,21 @@ public final class DeltaForceStrike extends JavaPlugin {
 
     public LiveKillFeedService getLiveKillFeedService() {
         return liveKillFeedService;
+    }
+
+    public org.starset.deltaforcestrike.spectator.SpectatorRoleManager getSpectatorRoleManager() {
+        return spectatorRoleManager;
+    }
+
+    public org.starset.deltaforcestrike.pause.PauseService getPauseService() {
+        return pauseService;
+    }
+
+    public org.starset.deltaforcestrike.pause.SnapshotService getSnapshotService() {
+        return snapshotService;
+    }
+
+    public org.starset.deltaforcestrike.tournament.TournamentService getTournamentService() {
+        return tournamentService;
     }
 }

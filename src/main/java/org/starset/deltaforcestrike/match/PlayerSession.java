@@ -1,6 +1,7 @@
 package org.starset.deltaforcestrike.match;
 
 import org.bukkit.entity.Player;
+import org.starset.deltaforcestrike.spectator.SpectatorRole;
 import org.starset.deltaforcestrike.util.ConfigKeys;
 
 import java.util.UUID;
@@ -19,11 +20,36 @@ public class PlayerSession {
     private boolean connected = true;
     /** 本条命是否已计入死亡（防重复） */
     private boolean deathCounted;
+    /** 在对局中的角色：参赛 / 占名额观战 / 不占名额导播 */
+    private SpectatorRole role = SpectatorRole.PLAYING;
 
     public PlayerSession(Player player, int startMoney) {
         this.uuid = player.getUniqueId();
         this.name = player.getName();
         this.money = startMoney;
+    }
+
+    public SpectatorRole getRole() {
+        return role == null ? SpectatorRole.PLAYING : role;
+    }
+
+    public void setRole(SpectatorRole role) {
+        this.role = role == null ? SpectatorRole.PLAYING : role;
+    }
+
+    /** 是否为参赛选手（占 T/CT 名额） */
+    public boolean isPlaying() {
+        return getRole() == SpectatorRole.PLAYING;
+    }
+
+    /** 是否为占名额的旁观者（ spectator + T + CT = max ） */
+    public boolean isSpectatorSlot() {
+        return getRole() == SpectatorRole.SPECTATOR;
+    }
+
+    /** 是否为导播（不占任何名额，自由飞行观战） */
+    public boolean isObserver() {
+        return getRole() == SpectatorRole.OBSERVER;
     }
 
     public UUID getUuid() {
@@ -124,6 +150,14 @@ public class PlayerSession {
 
     public void resetDeathCounted() {
         deathCounted = false;
+    }
+
+    public boolean isDeathCountedMark() {
+        return deathCounted;
+    }
+
+    public void setDeathCounted(boolean v) {
+        deathCounted = v;
     }
 
     public int getConsecutiveLosses() {

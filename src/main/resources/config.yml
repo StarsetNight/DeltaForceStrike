@@ -35,6 +35,41 @@ guide:
   # 新加入队列时是否自动发送玩法
   send-on-join: true
 
+# ---------- 暂停系统 ----------
+pause:
+  # 战术暂停：仅购买阶段可用
+  tactical:
+    # 每队常规局可用次数（每队）
+    per-match: 2
+    # 进入加赛后，每队次数重置为该值
+    overtime-reset: 1
+    # 单次战术暂停秒数
+    duration-seconds: 30
+  # 技术暂停：管理员可用，无限次数，需 /dfs resume 恢复
+  technical:
+    enabled: true
+
+# ---------- 观战 / 导播 ----------
+spectator-role:
+  # 是否允许 /dfs spectator 占名额旁观（与参赛人数合计 = max-players）
+  allow-spectator: true
+  # 是否允许 /dfs observer 不占名额自由观战（独立权限 deltaforcestrike.observer）
+  allow-observer: true
+
+# ---------- 赛事模式 ----------
+tournament:
+  # 关闭：任意玩家可入镜；开启：必须握手后才允许在竞技世界逗留
+  enabled: false
+  # 客户端未发送握手时的踢出等待时间（秒）
+  timeout-seconds: 10
+  # 踢出提示文案
+  kick-message: "§c[赛事] 未检测到合规客户端，请安装 DeltaForceStrike ClientUI mod 后再加入。"
+  # 客户端最低允许 mod 版本（留空表示不校验）
+  min-mod-version: ""
+  # 允许的 mod id 列表（留空表示不校验，但必须握手成功）
+  allowed-mod-ids: []
+
+
 # ---------- 比赛 ----------
 match:
   # 半场回合数：打完该回合后换边（T↔CT，比分对调）
@@ -45,8 +80,23 @@ match:
   max-rounds: 24
   # 整局结束 Title 停留后再回队列
   end-title-delay-ticks: 70
+  # 结算窗口（秒）：比赛结束后标题持续展示，平局时等待 /dfs overtime；
+  # 超时未进入加时则判比赛结束
+  end-window-seconds: 30
   # 友方伤害：false=关闭（可用 /dfs config friendly-fire true 运行时改）
   friendly-fire: false
+
+# ---------- 加时赛 ----------
+overtime:
+  # 加时赛制：3 场换边，先到 4 胜获胜（相当于新开一把，但比分继承正赛）
+  win-target: 4
+  half-round: 3
+  # 加时赛最多回合
+  max-rounds: 6
+  # 加时赛是否重置经济（新开一把）
+  reset-economy: true
+  # 加时赛重置后的每人资金（默认 10000）
+  start-money: 10000
 
 # ---------- 经济 ----------
 economy:

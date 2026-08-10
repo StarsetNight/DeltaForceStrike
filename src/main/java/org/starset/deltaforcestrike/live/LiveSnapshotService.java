@@ -86,7 +86,7 @@ public final class LiveSnapshotService {
     private String buildMap() {
         Map<String, String> m = new LinkedHashMap<>();
         String name = plugin.getConfig().getString("live.map.name", Worlds.arenaName());
-        m.put("name", LiveJson.str(name == null ? Worlds.arenaName() : name));
+        m.put("name", LiveJson.str(name));
         m.put("world", LiveJson.str(Worlds.arenaName()));
 
         double minX = plugin.getConfig().getDouble("live.map.min-x", -200);
@@ -157,9 +157,20 @@ public final class LiveSnapshotService {
         m.put("scoreCT", LiveJson.num(match.getScoreCT()));
         m.put("round", LiveJson.num(match.getCurrentRound()));
         m.put("secondsLeft", LiveJson.num(Math.max(0, secondsLeft)));
-        m.put("winTarget", LiveJson.num(plugin.getConfig().getInt("match.win-target", 13)));
-        m.put("halfRound", LiveJson.num(plugin.getConfig().getInt("match.half-round", 12)));
+        m.put("winTarget", LiveJson.num(match.isOvertime()
+                ? match.overtimeWinTarget()
+                : plugin.getConfig().getInt("match.win-target", 13)));
+        m.put("halfRound", LiveJson.num(match.isOvertime()
+                ? plugin.getConfig().getInt("overtime.half-round", 3)
+                : plugin.getConfig().getInt("match.half-round", 12)));
         m.put("halfSwapped", LiveJson.bool(match.getRoundManager().isHalfTimeSwapped()));
+        m.put("overtime", LiveJson.bool(match.isOvertime()));
+        if (match.isOvertime()) {
+            m.put("otCount", LiveJson.num(match.getOvertimeCount()));
+            m.put("otWinTarget", LiveJson.num(match.overtimeWinTarget()));
+            m.put("otHalfRound", LiveJson.num(plugin.getConfig().getInt("overtime.half-round", 3)));
+            m.put("otHalfSwapped", LiveJson.bool(match.getRoundManager().isHalfTimeSwapped()));
+        }
         m.put("maxPlayers", LiveJson.num(match.size()));
         m.put("bombPlanted", LiveJson.bool(bombPlanted));
         m.put("fuseLeft", LiveJson.num(fuseLeft));
@@ -208,12 +219,12 @@ public final class LiveSnapshotService {
             }
         }
         for (PlayerSession s : match.getSessions().values()) {
-            list.add(buildPlayer(match, s, items, numbers.getOrDefault(s.getUuid(), 0)));
+            list.add(buildPlayer(s, items, numbers.getOrDefault(s.getUuid(), 0)));
         }
         return LiveJson.arr(list);
     }
 
-    private String buildPlayer(Match match, PlayerSession s, ItemManager items, int number) {
+    private String buildPlayer(PlayerSession s, ItemManager items, int number) {
         Map<String, String> p = new LinkedHashMap<>();
         UUID uuid = s.getUuid();
         Player online = Bukkit.getPlayer(uuid);
