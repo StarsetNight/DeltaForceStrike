@@ -172,10 +172,6 @@ public class OperatorLoadout {
                 signatureReadyAtMs - Math.max(0, seconds) * 1000L);
     }
 
-    public void addUltimatePoints(int n) {
-        addUltimatePoints(n, 0);
-    }
-
     public void clearBeacon() {
         beaconLocation = null;
         beaconArmed = false;

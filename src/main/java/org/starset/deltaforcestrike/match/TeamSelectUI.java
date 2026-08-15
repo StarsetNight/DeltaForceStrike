@@ -1,4 +1,4 @@
-package org.starset.deltaforcestrike.util;
+package org.starset.deltaforcestrike.match;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -13,11 +13,9 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.starset.deltaforcestrike.DeltaForceStrike;
+import org.starset.deltaforcestrike.config.ConfigKeys;
 import org.starset.deltaforcestrike.item.ItemKeys;
-import org.starset.deltaforcestrike.match.Match;
-import org.starset.deltaforcestrike.match.PlayerSession;
-import org.starset.deltaforcestrike.match.Team;
-import org.starset.deltaforcestrike.match.TeamSelectHolder;
+import org.starset.deltaforcestrike.spectator.SpectatorRole;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -219,8 +217,7 @@ public final class TeamSelectUI {
 
     /** 观战按钮：点击后以观战模式加入（占房间名额） */
     private static ItemStack spectateButton(long count, PlayerSession self) {
-        boolean mine = self != null && self.getRole()
-                == org.starset.deltaforcestrike.spectator.SpectatorRole.SPECTATOR;
+        boolean mine = self != null && self.getRole() == SpectatorRole.SPECTATOR;
         ItemStack stack = new ItemStack(mine ? Material.GREEN_WOOL : Material.GRAY_WOOL);
         ItemMeta meta = stack.getItemMeta();
         meta.displayName(Component.text(

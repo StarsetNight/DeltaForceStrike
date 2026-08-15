@@ -2,7 +2,7 @@ package org.starset.deltaforcestrike.match;
 
 import org.bukkit.entity.Player;
 import org.starset.deltaforcestrike.spectator.SpectatorRole;
-import org.starset.deltaforcestrike.util.ConfigKeys;
+import org.starset.deltaforcestrike.config.ConfigKeys;
 
 import java.util.UUID;
 
@@ -91,10 +91,6 @@ public class PlayerSession {
     }
 
     public void addMoney(int amount) {
-        if (amount <= 0) {
-            setMoney(this.money + amount);
-            return;
-        }
         setMoney(this.money + amount);
     }
 

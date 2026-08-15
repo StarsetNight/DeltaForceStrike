@@ -25,7 +25,7 @@ import org.starset.deltaforcestrike.operator.OperatorLoadout;
 import org.starset.deltaforcestrike.operator.OperatorService;
 import org.starset.deltaforcestrike.operator.SkillKind;
 import org.starset.deltaforcestrike.operator.skill.impl.RoundSmokeHandler;
-import org.starset.deltaforcestrike.util.InventorySlots;
+import org.starset.deltaforcestrike.item.InventorySlots;
 import org.starset.deltaforcestrike.util.Worlds;
 
 import java.util.UUID;

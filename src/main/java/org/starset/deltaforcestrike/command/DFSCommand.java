@@ -14,6 +14,7 @@ import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
+import org.starset.deltaforcestrike.operator.OperatorSelectUI;
 import org.starset.deltaforcestrike.shop.ShopGUI;
 import org.starset.deltaforcestrike.spectator.SpectatorRole;
 import org.starset.deltaforcestrike.util.GameGuide;
@@ -152,7 +153,7 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length < 2) {
             // 打开干员选择 GUI
-            org.starset.deltaforcestrike.util.OperatorSelectUI.open(p);
+            OperatorSelectUI.open(p);
             return;
         }
         plugin.getMatchManager().trySelectOperator(p, args[1]);
@@ -717,9 +718,7 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         if (args.length == 2) {
             return switch (args[0].toLowerCase(Locale.ROOT)) {
                 case "team" -> filter(List.of("t", "ct"), args[1]);
-                case "agent" -> filter(List.of(
-                        "niko", "bruo", "aier", "wulong", "妮可", "布若", "艾尔", "骛龙"
-                ), args[1]);
+                case "agent" -> filter(operatorSuggestions(), args[1]);
                 case "setspawn" -> filter(List.of("queue", "t", "ct"), args[1]);
                 case "setsite" -> filter(List.of("a", "b"), args[1]);
                 case "config", "cfg", "set" -> filter(CONFIG_KEYS, args[1]);
@@ -738,14 +737,20 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             }
             return filter(List.of("1", "2", "3", "4", "5", "6", "8", "10", "12", "16"), args[2]);
         }
-        if (args.length == 3 && args[0].equalsIgnoreCase("setscore")) {
-            return filter(List.of("0", "1", "2", "3", "5", "6", "8", "10", "12", "13", "16"), args[2]);
-        }
         if (args.length == 3 && args[0].equalsIgnoreCase("setmoney")) {
             return filter(List.of("0", "800", "1000", "2000", "4000", "8000", "16000",
                     "+300", "-300"), args[2]);
         }
         return List.of();
+    }
+
+    /** 干员候选：注册表 id / 中文名 / 英文名（按 operators.yml 动态生成） */
+    private List<String> operatorSuggestions() {
+        var ops = plugin.getOperatorService();
+        if (ops == null || ops.getRegistry() == null) {
+            return List.of();
+        }
+        return new ArrayList<>(ops.getRegistry().asMap().keySet());
     }
 
     private List<String> filter(List<String> src, String prefix) {

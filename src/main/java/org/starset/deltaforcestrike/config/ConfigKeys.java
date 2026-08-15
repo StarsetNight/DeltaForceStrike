@@ -1,10 +1,11 @@
-package org.starset.deltaforcestrike.util;
+package org.starset.deltaforcestrike.config;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.starset.deltaforcestrike.DeltaForceStrike;
+import org.starset.deltaforcestrike.util.Worlds;
 
 public final class ConfigKeys {
 
@@ -15,7 +16,7 @@ public final class ConfigKeys {
     }
 
     public static int teamSize() {
-        return Math.max(1, cfg().getInt("queue.team-size", 3));
+        return Math.max(1, cfg().getInt("queue.team-size", 5));
     }
 
     public static int maxPlayers() {
@@ -40,7 +41,7 @@ public final class ConfigKeys {
 
     /** 背包箭矢上限（发远程补满、拾取上限共用） */
     public static int arrowsPerRanged() {
-        return Math.max(1, cfg().getInt("shop.arrows-per-ranged", 15));
+        return Math.max(1, cfg().getInt("shop.arrows-per-ranged", 25));
     }
 
     /** 经济上限（默认 16000） */

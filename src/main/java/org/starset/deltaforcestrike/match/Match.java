@@ -1,10 +1,11 @@
 package org.starset.deltaforcestrike.match;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.starset.deltaforcestrike.DeltaForceStrike;
-import org.starset.deltaforcestrike.round.RoundManager;
+import org.starset.deltaforcestrike.spectator.SpectatorRole;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -93,9 +94,6 @@ public class Match {
         }
     }
 
-    public void setScoreT(int v) { scoreT = Math.max(0, v); }
-    public void setScoreCT(int v) { scoreCT = Math.max(0, v); }
-
     public void swapScores() {
         int tmp = scoreT;
         scoreT = scoreCT;
@@ -103,7 +101,6 @@ public class Match {
     }
 
     public int size() { return sessions.size(); }
-    public boolean isFull(int max) { return sessions.size() >= max; }
     public boolean contains(UUID uuid) { return sessions.containsKey(uuid); }
 
     public List<Player> onlinePlayers() {
@@ -129,8 +126,7 @@ public class Match {
 
     public void broadcastActionBar(String legacy) {
         if (legacy == null) return;
-        Component c = net.kyori.adventure.text.serializer.legacy
-                .LegacyComponentSerializer.legacySection().deserialize(legacy);
+        Component c = LegacyComponentSerializer.legacySection().deserialize(legacy);
         for (Player p : onlinePlayers()) {
             p.sendActionBar(c);
         }
@@ -172,8 +168,8 @@ public class Match {
     public int occupiedSlots() {
         int n = 0;
         for (PlayerSession s : sessions.values()) {
-            if (s.getRole() == org.starset.deltaforcestrike.spectator.SpectatorRole.PLAYING
-                    || s.getRole() == org.starset.deltaforcestrike.spectator.SpectatorRole.SPECTATOR) {
+            if (s.getRole() == SpectatorRole.PLAYING
+                    || s.getRole() == SpectatorRole.SPECTATOR) {
                 n++;
             }
         }
@@ -184,14 +180,14 @@ public class Match {
     public int observerCount() {
         int n = 0;
         for (PlayerSession s : sessions.values()) {
-            if (s.getRole() == org.starset.deltaforcestrike.spectator.SpectatorRole.OBSERVER) n++;
+            if (s.getRole() == SpectatorRole.OBSERVER) n++;
         }
         return n;
     }
 
     public long countSpectatorSlots() {
         return sessions.values().stream()
-                .filter(s -> s.getRole() == org.starset.deltaforcestrike.spectator.SpectatorRole.SPECTATOR)
+                .filter(s -> s.getRole() == SpectatorRole.SPECTATOR)
                 .count();
     }
 }

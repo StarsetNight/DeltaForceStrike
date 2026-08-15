@@ -1,10 +1,11 @@
-package org.starset.deltaforcestrike.util;
+package org.starset.deltaforcestrike.bomb;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.starset.deltaforcestrike.DeltaForceStrike;
+import org.starset.deltaforcestrike.util.Worlds;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -10,10 +10,11 @@ import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
 import org.starset.deltaforcestrike.DeltaForceStrike;
+import org.starset.deltaforcestrike.config.ConfigKeys;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
-import org.starset.deltaforcestrike.round.RoundState;
+import org.starset.deltaforcestrike.match.RoundState;
 
 import java.util.Map;
 import java.util.UUID;
@@ -167,7 +168,7 @@ public final class GameScoreboard {
             set(obj, line--, "§6倒计时中");
         } else if (ms == MatchState.WAITING) {
             set(obj, line--, "§e队列 §f" + match.size()
-                    + "/" + plugin.getConfig().getInt("queue.max-players", 6));
+                    + "/" + ConfigKeys.maxPlayers());
         }
 
         set(obj, line--, "§e回合 §f" + match.getCurrentRound());
@@ -193,7 +194,7 @@ public final class GameScoreboard {
                         + (swapped ? " 下半场" : " 上半场")
                         + " §8R" + cr + "/" + otHalf);
             } else {
-                int half = plugin.getConfig().getInt("match.half-round", 4);
+                int half = plugin.getConfig().getInt("match.half-round", 12);
                 if (cr < half) {
                     set(obj, line, "§8半场: R" + half);
                 } else {

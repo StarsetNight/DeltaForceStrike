@@ -14,14 +14,16 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.item.ItemKeys;
+import org.starset.deltaforcestrike.item.InventorySlots;
 import org.starset.deltaforcestrike.match.Match;
+import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
-import org.starset.deltaforcestrike.round.RoundState;
+import org.starset.deltaforcestrike.match.RoundState;
 import org.starset.deltaforcestrike.operator.skill.SkillContext;
 import org.starset.deltaforcestrike.operator.skill.SkillHandler;
 import org.starset.deltaforcestrike.operator.skill.SkillHandlerRegistry;
 import org.starset.deltaforcestrike.operator.skill.SkillResult;
-import org.starset.deltaforcestrike.util.InventorySlots;
+import org.starset.deltaforcestrike.operator.skill.impl.EmergencyBeaconHandler;
 
 import java.util.Locale;
 import java.util.Map;
@@ -77,7 +79,10 @@ public class OperatorService {
     public boolean selectOperator(Player player, String idOrName) {
         OperatorDefinition def = registry.get(idOrName);
         if (def == null) {
-            player.sendMessage("§c未知干员。可用: niko, bruo, aier, wulong");
+            String available = registry.allUnique().stream()
+                    .map(OperatorDefinition::getId)
+                    .collect(java.util.stream.Collectors.joining(", "));
+            player.sendMessage("§c未知干员。可用: " + available);
             return false;
         }
         Match match = plugin.getMatchManager().getMatch();
@@ -628,7 +633,7 @@ public class OperatorService {
         if (!result.success()) {
             if (load.isBeaconDeployGrace()) {
                 skillClickCooldownUntil.put(player.getUniqueId(),
-                        now + org.starset.deltaforcestrike.operator.skill.impl.EmergencyBeaconHandler.DEPLOY_GRACE_MS);
+                        now + EmergencyBeaconHandler.DEPLOY_GRACE_MS);
             } else {
                 skillClickCooldownUntil.put(player.getUniqueId(), now + 200);
             }
@@ -656,8 +661,7 @@ public class OperatorService {
                         load.setBeaconTeleportConsumed(false);
                     } else if (load.isBeaconArmed()) {
                         skillClickCooldownUntil.put(player.getUniqueId(),
-                                System.currentTimeMillis()
-                                        + org.starset.deltaforcestrike.operator.skill.impl.EmergencyBeaconHandler.DEPLOY_GRACE_MS);
+                                System.currentTimeMillis() + EmergencyBeaconHandler.DEPLOY_GRACE_MS);
                         writePurchasableSlot(player, load);
                     } else {
                         consumePurchasableFully(player, load);
@@ -730,8 +734,7 @@ public class OperatorService {
             return;
         }
 
-        boolean inProgress = match.getState()
-                == org.starset.deltaforcestrike.match.MatchState.IN_PROGRESS;
+        boolean inProgress = match.getState() == MatchState.IN_PROGRESS;
 
         // 强效烟幕：按 loadout 到期时间刷粒子（与在线玩家循环解耦，避免误停）
         for (OperatorLoadout smokeLoad : loadouts.values()) {

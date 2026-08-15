@@ -1,4 +1,4 @@
-package org.starset.deltaforcestrike.round;
+package org.starset.deltaforcestrike.match;
 
 public enum RoundState {
     IDLE,

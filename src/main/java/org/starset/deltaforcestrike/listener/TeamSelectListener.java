@@ -16,7 +16,7 @@ import org.starset.deltaforcestrike.item.ItemKeys;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.Team;
 import org.starset.deltaforcestrike.match.TeamSelectHolder;
-import org.starset.deltaforcestrike.util.TeamSelectUI;
+import org.starset.deltaforcestrike.match.TeamSelectUI;
 import org.starset.deltaforcestrike.util.Worlds;
 
 /**

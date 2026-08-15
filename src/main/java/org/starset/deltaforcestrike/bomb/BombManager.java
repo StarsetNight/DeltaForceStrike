@@ -27,9 +27,9 @@ import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
-import org.starset.deltaforcestrike.round.RoundState;
-import org.starset.deltaforcestrike.util.BombSites;
-import org.starset.deltaforcestrike.util.InventorySlots;
+import org.starset.deltaforcestrike.match.RoundState;
+import org.starset.deltaforcestrike.bomb.BombSites;
+import org.starset.deltaforcestrike.item.InventorySlots;
 
 import java.util.HashMap;
 import java.util.Locale;
@@ -465,8 +465,9 @@ public class BombManager {
                 }
                 loc.getWorld().playSound(loc, Sound.ENTITY_GENERIC_EXPLODE, 2.5f, 0.7f);
 
-                double radius = plugin.getConfig().getDouble("bomb.damage-radius", 18.0);
-                double maxDamage = plugin.getConfig().getDouble("bomb.damage", 36.0);
+                double radius = plugin.getConfig().getDouble("bomb.damage-radius", 60.0);
+                double maxDamage = plugin.getConfig().getDouble("bomb.damage", 50.0);
+                boolean falloff = plugin.getConfig().getBoolean("bomb.damage-falloff", true);
 
                 for (Player p : loc.getWorld().getPlayers()) {
                     if (!plugin.getMatchManager().isInMatch(p)) {
@@ -485,7 +486,9 @@ public class BombManager {
                         continue;
                     }
 
-                    double dmg = damageByDistance(dist, radius, maxDamage);
+                    double dmg = falloff
+                            ? damageByDistance(dist, radius, maxDamage)
+                            : maxDamage;
                     if (dmg <= 0) {
                         continue;
                     }

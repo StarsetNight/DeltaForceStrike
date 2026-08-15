@@ -41,14 +41,28 @@ public final class GameRulesService {
         if (world == null || !Worlds.isArena(world)) {
             return;
         }
-        // 已是 EASY 则不再 set，减少无意义写入
-        if (world.getDifficulty() != Difficulty.EASY) {
-            world.setDifficulty(Difficulty.EASY);
+        // 难度取配置（默认 EASY）；已是目标难度则不再 set，减少无意义写入
+        Difficulty difficulty = parseDifficulty(
+                plugin.getConfig().getString("round.difficulty", "EASY"));
+        if (world.getDifficulty() != difficulty) {
+            world.setDifficulty(difficulty);
         }
 
         if (logOnce && !loggedArenaRules && plugin.getConfig().getBoolean("debug.enabled", false)) {
-            plugin.getLogger().info("[Rules] 竞技世界 " + world.getName() + " → EASY（仅提示一次）");
+            plugin.getLogger().info("[Rules] 竞技世界 " + world.getName()
+                    + " → " + difficulty + "（仅提示一次）");
             loggedArenaRules = true;
+        }
+    }
+
+    private static Difficulty parseDifficulty(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return Difficulty.EASY;
+        }
+        try {
+            return Difficulty.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return Difficulty.EASY;
         }
     }
 

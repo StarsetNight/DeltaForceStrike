@@ -3,6 +3,7 @@ package org.starset.deltaforcestrike.pause;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -11,13 +12,12 @@ import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
+import org.starset.deltaforcestrike.match.RoundState;
 import org.starset.deltaforcestrike.match.Team;
-import org.starset.deltaforcestrike.round.RoundState;
 
 import java.time.Duration;
 import java.util.EnumMap;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * 暂停服务：战术暂停 + 技术暂停，仅作用于购买阶段。
@@ -224,13 +224,12 @@ public final class PauseService {
     private void showTitle(Match match, String main, String sub) {
         Title.Times times = Title.Times.times(
                 Duration.ofMillis(150), Duration.ofSeconds(2), Duration.ofMillis(400));
-        Component mainC = net.kyori.adventure.text.serializer.legacy
-                .LegacyComponentSerializer.legacySection().deserialize(main);
+        Component mainC = LegacyComponentSerializer.legacySection().deserialize(main);
         if (mainC.color() == null) {
             mainC = mainC.color(NamedTextColor.GOLD).decoration(TextDecoration.BOLD, true);
         }
-        Component subC = net.kyori.adventure.text.serializer.legacy
-                .LegacyComponentSerializer.legacySection().deserialize(sub == null ? "" : sub);
+        Component subC = LegacyComponentSerializer.legacySection()
+                .deserialize(sub == null ? "" : sub);
         for (Player p : match.onlinePlayers()) {
             p.showTitle(Title.title(mainC, subC, times));
         }
@@ -255,11 +254,5 @@ public final class PauseService {
         return active.kind == PauseKind.TACTICAL
                 ? "TACTICAL:" + (active.team == Team.T ? "T" : "CT")
                 : "TECHNICAL";
-    }
-
-    /** 全员带走 UUID 列表（仅用于安全 */
-    @SuppressWarnings("unused")
-    private UUID[] emptyIds() {
-        return new UUID[0];
     }
 }

@@ -11,9 +11,9 @@ import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
-import org.starset.deltaforcestrike.round.RoundState;
-import org.starset.deltaforcestrike.util.BombSites;
-import org.starset.deltaforcestrike.util.InventorySlots;
+import org.starset.deltaforcestrike.match.RoundState;
+import org.starset.deltaforcestrike.bomb.BombSites;
+import org.starset.deltaforcestrike.item.InventorySlots;
 import org.starset.deltaforcestrike.util.Worlds;
 
 import java.util.ArrayList;

@@ -5,12 +5,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.starset.deltaforcestrike.DeltaForceStrike;
+import org.starset.deltaforcestrike.config.ConfigKeys;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
-import org.starset.deltaforcestrike.util.ConfigKeys;
-import org.starset.deltaforcestrike.util.InventorySlots;
-import org.starset.deltaforcestrike.util.ItemPlacement;
 
 import java.util.Locale;
 
@@ -21,8 +19,6 @@ import java.util.Locale;
  * T 禁止拆除钳
  */
 public final class ItemGiveService {
-
-    public static final int ARROWS_WITH_RANGED = 15;
 
     private final ItemManager itemManager;
 
@@ -357,10 +353,7 @@ public final class ItemGiveService {
         if (!ConfigKeys.shieldEnabled()) {
             return;
         }
-        ItemStack shield = itemManager.createItem("shield");
-        if (shield == null) {
-            shield = itemManager.createItem("equipments.shield");
-        }
+        ItemStack shield = itemManager.createItem("equipments.shield");
         if (shield != null) {
             player.getInventory().setItemInOffHand(shield);
             player.sendMessage("§b[DFS] 重型护甲附带 §f守护 §b盾牌。");

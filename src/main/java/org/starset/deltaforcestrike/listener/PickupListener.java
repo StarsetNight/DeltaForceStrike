@@ -24,9 +24,9 @@ import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
 import org.starset.deltaforcestrike.operator.OperatorService;
 import org.starset.deltaforcestrike.operator.SkillKind;
-import org.starset.deltaforcestrike.util.ConfigKeys;
-import org.starset.deltaforcestrike.util.InventorySlots;
-import org.starset.deltaforcestrike.util.ItemPlacement;
+import org.starset.deltaforcestrike.config.ConfigKeys;
+import org.starset.deltaforcestrike.item.InventorySlots;
+import org.starset.deltaforcestrike.item.ItemPlacement;
 import org.starset.deltaforcestrike.util.Worlds;
 
 import java.util.Locale;

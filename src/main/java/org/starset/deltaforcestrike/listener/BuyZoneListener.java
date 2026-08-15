@@ -13,8 +13,8 @@ import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
-import org.starset.deltaforcestrike.round.RoundState;
-import org.starset.deltaforcestrike.util.ConfigKeys;
+import org.starset.deltaforcestrike.match.RoundState;
+import org.starset.deltaforcestrike.config.ConfigKeys;
 import org.starset.deltaforcestrike.util.Worlds;
 
 public class BuyZoneListener implements Listener {

@@ -18,8 +18,8 @@ import org.starset.deltaforcestrike.item.ItemKeys;
 import org.starset.deltaforcestrike.item.ItemManager;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.PlayerSession;
-import org.starset.deltaforcestrike.round.RoundState;
-import org.starset.deltaforcestrike.util.ConfigKeys;
+import org.starset.deltaforcestrike.match.RoundState;
+import org.starset.deltaforcestrike.config.ConfigKeys;
 
 import java.util.List;
 import java.util.Locale;
@@ -57,7 +57,7 @@ public final class ShopGUI {
         player.sendMessage(Component.text("────────────────────────", NamedTextColor.GOLD));
     }
 
-    public static void broadcastChatButtons(org.starset.deltaforcestrike.match.Match match) {
+    public static void broadcastChatButtons(Match match) {
         if (match == null) {
             return;
         }
@@ -110,7 +110,7 @@ public final class ShopGUI {
         place(inv, im, 38, "skill-charge.charge", "charge");
 
         // 轻型 = 锁链；重型 = 铁
-        place(inv, im, 3, "equipments.leather-armor", "leather-armor", "chain-armor");
+        place(inv, im, 3, "equipments.leather-armor", "leather-armor");
         place(inv, im, 12, "equipments.iron-armor", "iron-armor");
 
         if (ConfigKeys.shieldEnabled()) {

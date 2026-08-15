@@ -7,6 +7,7 @@
 ![PaperMC](https://img.shields.io/badge/PaperMC-Plugin-green)
 ![Java](https://img.shields.io/badge/Java-25%2B-orange)
 ![Minecraft](https://img.shields.io/badge/Minecraft-26.2-blue)
+![Version](https://img.shields.io/badge/Version-1.5.0-blue)
 
 ---
 
@@ -103,7 +104,6 @@ DeltaForceStrike 将完整竞技流程整合为状态驱动系统：
 - 击杀奖励（$300）
 - 安包奖励（$300）
 - 拆包奖励（$200）
-- CT 死亡补偿（每存活 T +$100）
 
 资金用于购买：
 
@@ -260,13 +260,14 @@ CT:
 
 ## 📺 Live Overlay / HTTP API（CS2 Major 风格）
 
-为导播/观战界面提供实时数据接口。
+为导播/观战界面提供实时数据接口（JDK 内置 `HttpServer`，无第三方依赖；JSON 由内置轻量序列化器生成）。
 
 - **启用**：`live.enabled: true` + `live.token: "your-secret"`
 - **端口**：默认 25564（`live.bind: 0.0.0.0` 监听全网卡）
 - **鉴权**：Header `Authorization: Bearer <token>` 或查询参数 `?token=<token>` 或 Header `X-DFS-Token`
 - **刷新率**：默认 5 ticks（0.25s），金钱/血量近实时
 - **地图雷达**：需在配置标定 `live.map.min-x/min-z/max-x/max-z`
+- **观战页**：内置 HTML 模板位于插件 jar 的 `overlay.html`（打包自 `src/main/resources/overlay.html`）
 
 **端点**：
 - `GET /api/live?token=xxx` — 完整当前帧（玩家、血量、金钱、装备、炸弹、回合、比分、时间）
@@ -525,6 +526,9 @@ deltaforcestrike.admin (默认 op)
 | `round.prepare-time` | 购买阶段秒数 | `20` |
 | `round.combat-time` | 战斗/进攻时间 | `100` |
 | `round.buy-zone-radius` | 购买区半径 | `5` |
+| `round.natural-regeneration` | 是否允许自然回血 | `false` |
+| `round.auto-food` | 自动补饱食 | `true` |
+| `round.difficulty` | 竞技世界难度 | `EASY` |
 | `economy.start-money` | 起始资金 | `800` |
 | `economy.max-money` | 资金上限 | `16000` |
 | `bomb.plant-time` | 安包读条秒数 | `3` |
@@ -537,7 +541,6 @@ deltaforcestrike.admin (默认 op)
 | `bomb.beep.enabled` | 安包后滴滴声 | `true` |
 | `bomb.site-markers.enabled` | 包点浮动文字 | `true` |
 | `grenade.particle-multiplier` | 粒子倍率 | `2.0` |
-| `player.max-health` | 最大血量 | `20` |
 | `player.shield-enabled` | 盾牌启用 | `false` |
 | `spectator.lock-to-teammates` | 仅观战队友 | `true` |
 | `shop.arrows-per-ranged` | 远程武器补箭上限 | `25` |
@@ -616,37 +619,40 @@ operators:
 ```
 org.starset.deltaforcestrike
 
-├── DeltaForceStrike.java          # 主类、生命周期、服务注册
+├── DeltaForceStrike.java          # 主类：服务装配、生命周期、访问入口
 
-├── manager/
-│   └── GameManager.java           # 顶层管理器
+├── config/
+│   └── ConfigKeys.java            # 配置键常量 + 读取帮助
 
-├── match/
+├── match/                         # 对局领域（原 match/ + round/ + 选边 UI）
 │   ├── Match.java                 # 对局数据容器
 │   ├── MatchManager.java          # 队列、选边、干员选、对局流程
 │   ├── MatchState.java            # WAITING/COUNTDOWN/AGENT_SELECT/IN_PROGRESS/ENDING
 │   ├── PlayerSession.java         # 玩家会话（金钱、击杀、存活、干员、连败等）
-│   ├── Team.java                  # T / CT / NONE
-│   └── TeamSelectHolder.java      # 选边书 GUI
-
-├── round/
 │   ├── RoundManager.java          # 购买/战斗/拆弹/结算/半场换边/经济结算
-│   └── RoundState.java            # IDLE/BUY/COMBAT/BOMB_PLANTED/ROUND_END
+│   ├── RoundState.java            # IDLE/BUY/COMBAT/BOMB_PLANTED/ROUND_END
+│   ├── Team.java                  # T / CT / NONE
+│   ├── TeamSelectHolder.java      # 选边书 GUI Holder
+│   └── TeamSelectUI.java          # 选边书 / 选边 GUI 构建
 
 ├── bomb/
 │   ├── BombManager.java           # 安包/拆包/引信/爆炸/包点/滴滴声
 │   ├── BombDropGlowService.java   # 掉落 TNT 发光高亮
-│   └── BombSiteMarkerService.java # 包点浮动文字
+│   ├── BombSiteMarkerService.java # 包点浮动文字
+│   └── BombSites.java             # 包点坐标读取/判定
 
 ├── grenade/
-│   └── GrenadeService.java        # 投掷物物理/粒子/效果
+│   ├── GrenadeService.java        # 投掷物物理/粒子/效果
+│   ├── GrenadeKeys.java           # 投掷物 PDC 键
+│   └── GrenadeType.java           # SMOKE/WITHER/INCENDIARY
 
 ├── operator/
 │   ├── OperatorDefinition.java    # 干员定义数据类
 │   ├── OperatorKeys.java          # PDC 键
 │   ├── OperatorLoadout.java       # 玩家装备的技能组
 │   ├── OperatorRegistry.java      # operators.yml 加载/热更
-│   ├── OperatorSelectHolder.java  # 干员选择书 GUI
+│   ├── OperatorSelectHolder.java  # 干员选择书 GUI Holder
+│   ├── OperatorSelectUI.java      # 干员选择 GUI 构建
 │   ├── OperatorService.java       # 选择/充能/发放/触发
 │   ├── OperatorType.java          # ASSAULT/ENGINEER/MEDIC/SCOUT
 │   ├── PotionSpec.java            # 药水效果规格
@@ -672,31 +678,37 @@ org.starset.deltaforcestrike
 │       ├── SummonVexHandler.java
 │       └── WindChargeHandler.java
 
+├── item/
+│   ├── GameItem.java              # 竞技物品包装
+│   ├── ItemGiveService.java       # 发放/补给/补箭
+│   ├── ItemKeys.java              # PDC 键
+│   ├── ItemManager.java           # items.yml 加载/查找
+│   ├── InventorySlots.java        # 热键槽位常量
+│   └── ItemPlacement.java         # 物品栏布局
+
 ├── shop/
 │   ├── ShopGUI.java               # 箱子 GUI 构建/打开
 │   ├── ShopHolder.java            # InventoryHolder
 │   └── ShopListener.java          # 点击处理
 
-├── item/
-│   ├── GameItem.java              # 竞技物品包装
-│   ├── ItemGiveService.java       # 发放/补给/补箭
-│   ├── ItemKeys.java              # PDC 键
-│   └── ItemManager.java           # items.yml 加载/查找
+├── game/
+│   └── GameRulesService.java      # 世界规则（难度/饱食）
 
 ├── listener/
 │   ├── ArenaPlayerListener.java   # 进世界自动入队
 │   ├── BombListener.java          # 安包/拆包交互
 │   ├── BuyZoneListener.java       # 购买区限制
 │   ├── GameModeLockListener.java  # 强制冒险模式
-│   ├── GameRulesListener.java     # 世界规则/饱食/禁掉落
+│   ├── GameRulesListener.java     # 世界规则/致死/友伤/掉落
 │   ├── GrenadeListener.java       # 投掷物右键
-│   ├── InventoryLockListener.java # 非法物品清扫
+│   ├── InventoryLockListener.java # 非法物品清扫 + 物品栏锁定
 │   ├── ItemProtectListener.java   # 物品保护（防丢/防移动）
 │   ├── OperatorSelectListener.java# 干员选择书点击
 │   ├── OperatorSkillListener.java # 技能物品右键触发
 │   ├── PickupListener.java        # 拾取限制
 │   ├── SpectatorLockListener.java # 旁观锁队友
-│   └── TeamSelectListener.java    # 选边书点击
+│   ├── TeamSelectListener.java    # 选边书点击
+│   └── TournamentListener.java    # 赛事握手通道
 
 ├── scoreboard/
 │   ├── GameScoreboard.java        # 侧边栏分数板
@@ -704,27 +716,32 @@ org.starset.deltaforcestrike
 │   └── TabListService.java        # Tab 列表（比分+金钱+干员）
 
 ├── spectator/
-│   └── SpectatorLockService.java  # 仅观战队友、滚轮切换
+│   ├── SpectatorLockService.java  # 仅观战队友、滚轮切换
+│   ├── SpectatorRole.java         # PLAYING/SPECTATOR/OBSERVER
+│   └── SpectatorRoleManager.java  # 角色行为（旁观/导播）
+
+├── pause/
+│   ├── PauseService.java          # 战术/技术暂停
+│   └── SnapshotService.java       # 购买阶段快照与回滚
+
+├── hud/
+│   └── HudSyncService.java        # 客户端 HUD 同步（Fabric ClientUI）
 
 ├── live/
-│   ├── LiveHttpServer.java        # Undertow HTTP 服务
-│   ├── LiveJson.java              # Jackson 序列化
+│   ├── LiveHttpServer.java        # JDK HttpServer 导播服务
+│   ├── LiveJson.java              # 手写轻量 JSON 序列化
 │   ├── LiveKillFeedService.java   # 击杀事件流
-│   ├── LiveOverlayHtml.java       # 内置观战页
+│   ├── LiveOverlayHtml.java       # 观战页加载器（模板见 resources/overlay.html）
 │   └── LiveSnapshotService.java   # 快照采集（玩家/炸弹/回合/经济）
+
+├── tournament/
+│   └── TournamentService.java     # 赛事模式握手/踢出
 
 ├── util/
 │   ├── ArenaCleanup.java          # 掉落物/实体清理
-│   ├── BombSites.java             # 包点坐标工具
-│   ├── ConfigKeys.java            # 配置键常量 + 读取帮助
 │   ├── DeathDrops.java            # 死亡掉落装备
 │   ├── GameGuide.java             # 玩法说明（可点击）
-│   ├── GrenadeKeys.java           # 投掷物 PDC
-│   ├── GrenadeType.java           # SMOKE/WITHER/INCENDIARY
-│   ├── InventorySlots.java        # 热键槽位常量
-│   ├── ItemPlacement.java         # 物品栏布局
-│   ├── OperatorSelectUI.java      # 干员选择书构建
-│   ├── TeamSelectUI.java          # 选边书构建
+│   ├── PlayerState.java           # 玩家状态重置（物品栏/药水/杂项）
 │   └── Worlds.java                # 竞技世界判断
 
 └── command/
@@ -757,12 +774,10 @@ org.starset.deltaforcestrike
 
 | 模块 | 职责 |
 |------|------|
-| Match | 管理整场比赛（队列、选边、干员、比分、半场） |
-| Round | 管理单个回合（购买/战斗/拆弹/结算/经济/换边） |
+| match/ | 整场对局（队列、选边、干员、比分、半场）+ 单回合状态机（购买/战斗/拆弹/结算/经济/换边） |
 | Listener | Bukkit 事件入口，仅做分发与基础判断 |
 | Service | 核心游戏逻辑（炸弹/投掷物/干员/商店/导播/记分板） |
-| Manager | 生命周期管理、跨模块协调 |
-| Util | 通用工具、配置读取、UI 构建、PDC 键 |
+| util/ | 通用工具（世界判断、玩家状态重置、掉落、玩法说明） |
 
 ---
 

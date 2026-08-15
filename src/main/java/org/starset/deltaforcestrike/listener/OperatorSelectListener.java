@@ -11,7 +11,7 @@ import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.item.ItemKeys;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.operator.OperatorSelectHolder;
-import org.starset.deltaforcestrike.util.OperatorSelectUI;
+import org.starset.deltaforcestrike.operator.OperatorSelectUI;
 
 /**
  * 干员选择 GUI 点击。

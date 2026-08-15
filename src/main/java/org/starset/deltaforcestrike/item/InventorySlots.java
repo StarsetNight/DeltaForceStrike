@@ -1,4 +1,4 @@
-package org.starset.deltaforcestrike.util;
+package org.starset.deltaforcestrike.item;
 
 /**
  * 热键 0-8 对应玩家看到的 1-9 格。

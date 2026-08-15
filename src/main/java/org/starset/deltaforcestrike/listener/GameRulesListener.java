@@ -34,7 +34,7 @@ import org.starset.deltaforcestrike.item.ItemManager;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
-import org.starset.deltaforcestrike.round.RoundState;
+import org.starset.deltaforcestrike.match.RoundState;
 import org.starset.deltaforcestrike.util.DeathDrops;
 import org.starset.deltaforcestrike.util.Worlds;
 
@@ -49,13 +49,6 @@ public class GameRulesListener implements Listener {
     public GameRulesListener(DeltaForceStrike plugin, GameRulesService rules) {
         this.plugin = plugin;
         this.rules = rules;
-    }
-
-    private boolean inMatch(Player player) {
-        return Worlds.isArena(player)
-                && plugin.getMatchManager().isInMatch(player)
-                && plugin.getMatchManager().getMatch() != null
-                && plugin.getMatchManager().getMatch().getState() == MatchState.IN_PROGRESS;
     }
 
     // ------------------------------------------------------------------
@@ -92,18 +85,13 @@ public class GameRulesListener implements Listener {
         if (!(event.getEntity() instanceof Player player)) {
             return;
         }
-        if (!inMatch(player) && !(Worlds.isArena(player) && plugin.getMatchManager().isInMatch(player))) {
+        if (!Worlds.isArena(player) || !plugin.getMatchManager().isInMatch(player)) {
             return;
         }
-        if (!plugin.getMatchManager().isInMatch(player)) {
-            return;
-        }
-        // 仅禁止自然回血（饱食）；允许药水再生（生命恩典 REGEN / MAGIC_REGEN）
-        switch (event.getRegainReason()) {
-            case SATIATED -> event.setCancelled(true);
-            default -> {
-                // REGEN, MAGIC_REGEN, MAGIC, WITHER, CUSTOM 等放行
-            }
+        // 默认禁止自然回血（饱食）；允许药水再生（生命恩典 REGEN / MAGIC_REGEN）
+        if (event.getRegainReason() == EntityRegainHealthEvent.RegainReason.SATIATED
+                && !plugin.getConfig().getBoolean("round.natural-regeneration", false)) {
+            event.setCancelled(true);
         }
     }
 
@@ -112,7 +100,10 @@ public class GameRulesListener implements Listener {
         if (!(event.getEntity() instanceof Player player)) {
             return;
         }
-        if (!plugin.getMatchManager().isInMatch(player) || !Worlds.isArena(player)) {
+        if (!Worlds.isArena(player) || !plugin.getMatchManager().isInMatch(player)) {
+            return;
+        }
+        if (!plugin.getConfig().getBoolean("round.auto-food", true)) {
             return;
         }
         event.setCancelled(true);

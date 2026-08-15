@@ -13,7 +13,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.item.ItemKeys;
-import org.starset.deltaforcestrike.util.BombSites;
+import org.starset.deltaforcestrike.bomb.BombSites;
 import org.starset.deltaforcestrike.util.Worlds;
 
 import java.util.ArrayList;

@@ -6,8 +6,9 @@ import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
+import org.starset.deltaforcestrike.match.RoundState;
 import org.starset.deltaforcestrike.match.Team;
-import org.starset.deltaforcestrike.round.RoundState;
+import org.starset.deltaforcestrike.util.PlayerState;
 import org.starset.deltaforcestrike.util.Worlds;
 
 /**
@@ -53,15 +54,8 @@ public final class SpectatorRoleManager {
         }
         try { player.setSpectatorTarget(null); } catch (Throwable ignored) {}
 
-        player.getInventory().clear();
-        player.getInventory().setHelmet(null);
-        player.getInventory().setChestplate(null);
-        player.getInventory().setLeggings(null);
-        player.getInventory().setBoots(null);
-        player.getInventory().setItemInOffHand(null);
-        for (var pe : player.getActivePotionEffects()) {
-            player.removePotionEffect(pe.getType());
-        }
+        PlayerState.clearInventory(player);
+        PlayerState.clearPotionEffects(player);
         player.setFireTicks(0);
         player.setFallDistance(0f);
 

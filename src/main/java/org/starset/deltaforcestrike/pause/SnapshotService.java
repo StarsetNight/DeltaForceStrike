@@ -11,7 +11,7 @@ import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
-import org.starset.deltaforcestrike.round.RoundState;
+import org.starset.deltaforcestrike.match.RoundState;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -24,7 +24,7 @@ import java.util.UUID;
  * 干员 ID、存活标记、队伍、炸弹携带者、干员充能（通过 onRoundStart 之后状态）。
  * 恢复后重新执行购买阶段开局（teleport 到出生点、ejects spectator），金钱/库存还原，
  * 不重新发干员技能（保留快照时的充能）：通过 §3 调用 {@link
- * org.starset.deltaforcestrike.round.RoundManager#restartBuyFromSnapshot()} 实现。</p>
+ * org.starset.deltaforcestrike.match.RoundManager#restartBuyFromSnapshot()} 实现。</p>
  */
 public final class SnapshotService {
 

@@ -45,7 +45,7 @@ public final class LiveHttpServer {
             return;
         }
 
-        int port = plugin.getConfig().getInt("live.port", 8765);
+        int port = plugin.getConfig().getInt("live.port", 25564);
         String bind = plugin.getConfig().getString("live.bind", "0.0.0.0");
         try {
             server = HttpServer.create(new InetSocketAddress(bind, port), 0);

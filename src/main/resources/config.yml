@@ -104,11 +104,8 @@ economy:
   # 经济上限：任何途径获得金钱后都不会超过此值
   max-money: 16000
   victory-bonus: 3200
+  # 败方分档奖励（按连败次数取档，即连败补偿）
   defeat-bonus:
-    - 2000
-    - 2550
-    - 3100
-  loss-streak-bonus:
     - 2000
     - 2550
     - 3100
@@ -116,7 +113,6 @@ economy:
   kill-reward: 300
   plant-reward: 300
   defuse-reward: 200
-  ct-death-bonus-per-t: 100
 
 # ---------- 回合 ----------
 round:
@@ -132,8 +128,6 @@ round:
 
 # ---------- 玩家 ----------
 player:
-  max-health: 20
-  keep-inventory: false
   drop-equipment: false
   armor-vanish: true
   allow-diamond-armor: false

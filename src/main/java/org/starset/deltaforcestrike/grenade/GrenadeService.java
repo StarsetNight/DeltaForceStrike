@@ -21,10 +21,10 @@ import org.starset.deltaforcestrike.item.ItemManager;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
-import org.starset.deltaforcestrike.round.RoundState;
-import org.starset.deltaforcestrike.util.ConfigKeys;
-import org.starset.deltaforcestrike.util.GrenadeKeys;
-import org.starset.deltaforcestrike.util.GrenadeType;
+import org.starset.deltaforcestrike.match.RoundState;
+import org.starset.deltaforcestrike.config.ConfigKeys;
+import org.starset.deltaforcestrike.grenade.GrenadeKeys;
+import org.starset.deltaforcestrike.grenade.GrenadeType;
 import org.starset.deltaforcestrike.util.Worlds;
 
 import java.util.UUID;
@@ -235,7 +235,7 @@ public class GrenadeService {
         world.playSound(center, Sound.ENTITY_GENERIC_EXTINGUISH_FIRE, 1f, 0.5f);
 
         int durationTicks = plugin.getConfig().getInt("grenade.smoke.duration-ticks", 160);
-        double radius = plugin.getConfig().getDouble("grenade.smoke.radius", 4.0);
+        double radius = plugin.getConfig().getDouble("grenade.smoke.radius", 6.0);
         boolean darkness = plugin.getConfig().getBoolean("grenade.smoke.apply-darkness", false);
 
         new BukkitRunnable() {
@@ -302,7 +302,7 @@ public class GrenadeService {
         world.playSound(center, Sound.ENTITY_SPLASH_POTION_BREAK, 1f, 0.8f);
 
         int durationTicks = plugin.getConfig().getInt("grenade.wither.duration-ticks", 120);
-        float radius = (float) plugin.getConfig().getDouble("grenade.wither.radius", 3.0);
+        float radius = (float) plugin.getConfig().getDouble("grenade.wither.radius", 6.0);
         int amplifier = plugin.getConfig().getInt("grenade.wither.amplifier", 0);
 
         world.spawn(center.clone().add(0, 0.2, 0), AreaEffectCloud.class, c -> {

@@ -1,4 +1,4 @@
-package org.starset.deltaforcestrike.util;
+package org.starset.deltaforcestrike.grenade;
 
 import org.bukkit.NamespacedKey;
 import org.starset.deltaforcestrike.DeltaForceStrike;

@@ -1,4 +1,4 @@
-package org.starset.deltaforcestrike.util;
+package org.starset.deltaforcestrike.item;
 
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;

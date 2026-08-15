@@ -1,4 +1,4 @@
-package org.starset.deltaforcestrike.round;
+package org.starset.deltaforcestrike.match;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -12,15 +12,14 @@ import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 import org.starset.deltaforcestrike.DeltaForceStrike;
+import org.starset.deltaforcestrike.config.ConfigKeys;
 import org.starset.deltaforcestrike.item.ItemGiveService;
+import org.starset.deltaforcestrike.item.ItemKeys;
 import org.starset.deltaforcestrike.item.ItemManager;
-import org.starset.deltaforcestrike.match.Match;
-import org.starset.deltaforcestrike.match.PlayerSession;
-import org.starset.deltaforcestrike.match.Team;
+import org.starset.deltaforcestrike.item.InventorySlots;
 import org.starset.deltaforcestrike.shop.ShopGUI;
 import org.starset.deltaforcestrike.util.ArenaCleanup;
-import org.starset.deltaforcestrike.util.ConfigKeys;
-import org.starset.deltaforcestrike.util.InventorySlots;
+import org.starset.deltaforcestrike.util.PlayerState;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -149,16 +148,9 @@ public class RoundManager {
 
         for (Player p : match.onlinePlayers()) {
             forceExitSpectator(p);
-            p.getInventory().clear();
-            p.getInventory().setHelmet(null);
-            p.getInventory().setChestplate(null);
-            p.getInventory().setLeggings(null);
-            p.getInventory().setBoots(null);
-            p.getInventory().setItemInOffHand(null);
+            PlayerState.clearInventory(p);
+            PlayerState.clearPotionEffects(p);
             p.setGameMode(GameMode.ADVENTURE);
-            for (var pe : p.getActivePotionEffects()) {
-                p.removePotionEffect(pe.getType());
-            }
         }
 
         if (plugin.getOperatorService() != null) {
@@ -177,7 +169,7 @@ public class RoundManager {
         ArenaCleanup.clearDrops();
 
         state = RoundState.BUY;
-        secondsLeft = plugin.getConfig().getInt("round.prepare-time", 15);
+        secondsLeft = plugin.getConfig().getInt("round.prepare-time", 20);
         buySituationTitleShown = false;
 
         broadcastLegacy("§e[DFS] 第 §f" + match.getCurrentRound()
@@ -275,7 +267,15 @@ public class RoundManager {
             ShopGUI.broadcastChatButtons(match);
         }, 5L);
 
-        task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+        task = runBuyTimer();
+    }
+
+    /**
+     * 购买阶段主计时器：暂停冻结、强制退出旁观、倒计时/局势 Title/UI 刷新。
+     * startBuyPhase 与 restartBuyFromSnapshot 共用同一套逻辑。
+     */
+    private BukkitTask runBuyTimer() {
+        return Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (state != RoundState.BUY) {
                 cancel();
                 return;
@@ -420,39 +420,9 @@ public class RoundManager {
             }
         });
 
-        task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            if (state != RoundState.BUY) {
-                cancel();
-                return;
-            }
-            if (plugin.getPauseService() != null && plugin.getPauseService().isPaused()) {
-                match.broadcastActionBar("§6⏸ " + plugin.getPauseService().statusLine()
-                        + " §7| §e购买阶段 §f" + secondsLeft + "s");
-                return;
-            }
-            for (Player p : match.onlinePlayers()) {
-                PlayerSession s = match.getSession(p.getUniqueId());
-                if (s != null && s.isPlaying() && s.hasTeam() && s.isAlive()
-                        && p.getGameMode() == GameMode.SPECTATOR) {
-                    forceExitSpectator(p);
-                }
-            }
-            actionBarLegacy("§e购买阶段 §f" + secondsLeft + "s §7| §a/dfs shop §7| §a/dfs pause §8战术暂停");
-            if (secondsLeft <= 0) {
-                startCombatPhase();
-                return;
-            }
-            if (secondsLeft == 5 && !buySituationTitleShown) {
-                buySituationTitleShown = true;
-                showBuyPhaseSituationTitles();
-            }
-            if (secondsLeft <= 5) {
-                broadcastLegacy("§e购买阶段剩余 §c" + secondsLeft + "s");
-            }
-            refreshUi();
-            secondsLeft--;
-        }, 0L, 20L);
+        task = runBuyTimer();
     }
+
     /**
      * 购买阶段剩 5 秒：局势 Title。
      * 优先级：决胜局 &gt; 赛点 &gt; 上半场最终局 &gt; 半场手枪局（攻/防视角）
@@ -571,9 +541,7 @@ public class RoundManager {
         boolean offEmpty = off.getType().isAir() || off.getAmount() <= 0;
         if (ConfigKeys.shieldEnabled()) {
             if (offEmpty || !items.isShield(off)) {
-                if (!give.give(p, "shield", true)) {
-                    give.give(p, "equipments.shield", true);
-                }
+                give.give(p, "equipments.shield", true);
             }
         } else if (!offEmpty && (items.isShield(off) || off.getType() == Material.SHIELD)) {
             inv.setItemInOffHand(null);
@@ -624,10 +592,7 @@ public class RoundManager {
             carrier.getInventory().setItem(InventorySlots.BOMB, null);
         }
 
-        boolean ok = give.give(carrier, "plant-bomb", true);
-        if (!ok) {
-            ok = give.give(carrier, "bomb.plant-bomb", true);
-        }
+        boolean ok = give.give(carrier, "bomb.plant-bomb", true);
         if (ok) {
             carrier.sendMessage("§c§l[DFS] 你携带改造TNT！§7请安装到包点。（热键第3格）");
             for (Player p : tPlayers) {
@@ -647,7 +612,7 @@ public class RoundManager {
         String action = null;
         if (stack.hasItemMeta()) {
             action = stack.getItemMeta().getPersistentDataContainer().get(
-                    org.starset.deltaforcestrike.item.ItemKeys.action(),
+                    ItemKeys.action(),
                     org.bukkit.persistence.PersistentDataType.STRING);
         }
         if ("defuse".equalsIgnoreCase(action)) {
@@ -811,9 +776,9 @@ public class RoundManager {
         int winMoney = plugin.getConfig().getInt("economy.victory-bonus", 3200);
         List<Integer> defeat = plugin.getConfig().getIntegerList("economy.defeat-bonus");
         if (defeat.isEmpty()) {
-            defeat = List.of(1600, 2000, 2400);
+            defeat = List.of(2000, 2550, 3100);
         }
-        int pistol = plugin.getConfig().getInt("economy.pistol-round-bonus", 2400);
+        int pistol = plugin.getConfig().getInt("economy.pistol-round-bonus", 2550);
 
         for (PlayerSession s : match.getSessions().values()) {
             if (!s.hasTeam()) {

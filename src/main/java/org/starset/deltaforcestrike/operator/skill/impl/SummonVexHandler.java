@@ -1,5 +1,6 @@
 package org.starset.deltaforcestrike.operator.skill.impl;
 
+import org.bukkit.GameMode;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.EntityType;
@@ -9,6 +10,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.PlayerSession;
+import org.starset.deltaforcestrike.match.Team;
 import org.starset.deltaforcestrike.operator.skill.SkillContext;
 import org.starset.deltaforcestrike.operator.skill.SkillHandler;
 import org.starset.deltaforcestrike.operator.skill.SkillResult;
@@ -120,9 +122,7 @@ public class SummonVexHandler implements SkillHandler {
         return SkillResult.ok("亡灵已召唤！（仅攻击敌方）");
     }
 
-    private static Player nearestEnemy(Match match, UUID ownerId,
-                                       org.starset.deltaforcestrike.match.Team ownerTeam,
-                                       Vex vex) {
+    private static Player nearestEnemy(Match match, UUID ownerId, Team ownerTeam, Vex vex) {
         Player best = null;
         double bestD = Double.MAX_VALUE;
         for (Player other : match.onlinePlayers()) {
@@ -136,7 +136,7 @@ public class SummonVexHandler implements SkillHandler {
             if (os.getTeam() == ownerTeam) {
                 continue;
             }
-            if (other.getGameMode() == org.bukkit.GameMode.SPECTATOR) {
+            if (other.getGameMode() == GameMode.SPECTATOR) {
                 continue;
             }
             double d = other.getLocation().distanceSquared(vex.getLocation());

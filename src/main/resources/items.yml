@@ -106,19 +106,8 @@ items:
 
   equipments:
 
-    # 轻型 = 锁链甲（id 保留 leather-armor 兼容商店）
+    # 轻型 = 锁链甲（保留 leather-armor id，删除重复的 chain-armor）
     leather-armor:
-      name: "§a轻型护甲"
-      type: armor
-      price: 650
-      kind: armor_set
-      armor:
-        helmet: CHAINMAIL_HELMET
-        chestplate: CHAINMAIL_CHESTPLATE
-        leggings: CHAINMAIL_LEGGINGS
-        boots: CHAINMAIL_BOOTS
-
-    chain-armor:
       name: "§a轻型护甲"
       type: armor
       price: 650
@@ -187,24 +176,13 @@ items:
       slot: bomb
       undroppable: false
 
-    bomb:
-
-      plant-bomb:
-        name: "§c改造TNT"
-        type: bomb
-        material: TNT
-        price: 0
-        action: plant
-        slot: bomb
-        undroppable: false
-
-      defuse-kit:
-        name: "§e拆除钳"
-        type: defuse          # 不要用 utility，避免进道具槽逻辑
-        material: SHEARS
-        price: 300
-        action: defuse
-        slot: bomb            # 与 C4 同一槽（热键第 3 格）
+    defuse-kit:
+      name: "§e拆除钳"
+      type: defuse          # 不要用 utility，避免进道具槽逻辑
+      material: SHEARS
+      price: 300
+      action: defuse
+      slot: bomb            # 与 C4 同一槽（热键第 3 格）
 
 
   skill-charge:

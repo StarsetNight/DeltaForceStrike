@@ -13,8 +13,14 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 import org.starset.deltaforcestrike.DeltaForceStrike;
-import org.starset.deltaforcestrike.round.RoundState;
-import org.starset.deltaforcestrike.util.*;
+import org.starset.deltaforcestrike.config.ConfigKeys;
+import org.starset.deltaforcestrike.operator.OperatorSelectUI;
+import org.starset.deltaforcestrike.spectator.SpectatorRole;
+import org.starset.deltaforcestrike.util.ArenaCleanup;
+import org.starset.deltaforcestrike.util.DeathDrops;
+import org.starset.deltaforcestrike.util.GameGuide;
+import org.starset.deltaforcestrike.util.PlayerState;
+import org.starset.deltaforcestrike.util.Worlds;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -207,32 +213,7 @@ public class MatchManager {
         } catch (Throwable ignored) {
         }
         player.closeInventory();
-        player.getInventory().clear();
-        player.getInventory().setHelmet(null);
-        player.getInventory().setChestplate(null);
-        player.getInventory().setLeggings(null);
-        player.getInventory().setBoots(null);
-        player.getInventory().setItemInOffHand(null);
-        player.setItemOnCursor(null);
-        player.getInventory().setHeldItemSlot(0);
-
-        for (var pe : player.getActivePotionEffects()) {
-            player.removePotionEffect(pe.getType());
-        }
-        player.setFireTicks(0);
-        player.setFreezeTicks(0);
-        player.setFallDistance(0f);
-        player.setVelocity(new org.bukkit.util.Vector(0, 0, 0));
-        player.setFlying(false);
-        player.setAllowFlight(false);
-        player.setGliding(false);
-        player.setExp(0f);
-        player.setLevel(0);
-        player.setTotalExperience(0);
-        try {
-            player.setAbsorptionAmount(0);
-        } catch (Throwable ignored) {
-        }
+        PlayerState.resetAll(player);
 
         player.setGameMode(GameMode.ADVENTURE);
         // 未入队旁观等待：可受伤关闭，避免乱入战场被打
@@ -474,7 +455,7 @@ public class MatchManager {
         }
         if (match.contains(player.getUniqueId())) {
             return setRoleAndApply(player,
-                    org.starset.deltaforcestrike.spectator.SpectatorRole.SPECTATOR);
+                    SpectatorRole.SPECTATOR);
         }
         int max = ConfigKeys.maxPlayers();
         if (match.occupiedSlots() >= max) {
@@ -484,7 +465,7 @@ public class MatchManager {
         }
         int startMoney = 0;
         var session = new PlayerSession(player, startMoney);
-        session.setRole(org.starset.deltaforcestrike.spectator.SpectatorRole.SPECTATOR);
+        session.setRole(SpectatorRole.SPECTATOR);
         session.setAlive(false);
         match.getSessions().put(player.getUniqueId(), session);
         if (plugin.getSpectatorRoleManager() != null) {
@@ -509,10 +490,10 @@ public class MatchManager {
         }
         if (match.contains(player.getUniqueId())) {
             return setRoleAndApply(player,
-                    org.starset.deltaforcestrike.spectator.SpectatorRole.OBSERVER);
+                    SpectatorRole.OBSERVER);
         }
         var session = new PlayerSession(player, 0);
-        session.setRole(org.starset.deltaforcestrike.spectator.SpectatorRole.OBSERVER);
+        session.setRole(SpectatorRole.OBSERVER);
         session.setAlive(false);
         match.getSessions().put(player.getUniqueId(), session);
         if (plugin.getSpectatorRoleManager() != null) {
@@ -522,8 +503,7 @@ public class MatchManager {
         return true;
     }
 
-    private boolean setRoleAndApply(Player player,
-                                     org.starset.deltaforcestrike.spectator.SpectatorRole role) {
+    private boolean setRoleAndApply(Player player, SpectatorRole role) {
         if (plugin.getSpectatorRoleManager() == null) return false;
         return plugin.getSpectatorRoleManager().setRole(player, role);
     }
@@ -552,7 +532,7 @@ public class MatchManager {
 
         cancelTasks();
         match.setState(MatchState.COUNTDOWN);
-        countdownLeft = plugin.getConfig().getInt("queue.countdown-seconds", 30);
+        countdownLeft = plugin.getConfig().getInt("queue.countdown-seconds", 15);
 
         match.broadcast("§6[DFS] §e准备开始！§f" + countdownLeft
                 + " §e秒。点击聊天选边，或 §a/dfs team t§e / §bct");
@@ -819,7 +799,7 @@ public class MatchManager {
         }
         // 选择 T/CT 即视为参赛选手（从观战/导播切回）
         if (!self.isPlaying()) {
-            self.setRole(org.starset.deltaforcestrike.spectator.SpectatorRole.PLAYING);
+            self.setRole(SpectatorRole.PLAYING);
             self.setAlive(true);
             player.sendMessage("§a[DFS] 你已切换为参赛选手。");
             if (plugin.getSpectatorRoleManager() != null) {
@@ -852,7 +832,7 @@ public class MatchManager {
     }
 
     private void balanceTeamsIfNeeded() {
-        if (match == null) {
+        if (match == null || !plugin.getConfig().getBoolean("queue.auto-balance", true)) {
             return;
         }
         int teamSize = ConfigKeys.teamSize();
@@ -1126,12 +1106,7 @@ public class MatchManager {
                 p.setInvulnerable(false);
                 safeSpectatorClear(p);
                 p.setGameMode(GameMode.ADVENTURE);
-                p.getInventory().clear();
-                p.getInventory().setHelmet(null);
-                p.getInventory().setChestplate(null);
-                p.getInventory().setLeggings(null);
-                p.getInventory().setBoots(null);
-                p.getInventory().setItemInOffHand(null);
+                PlayerState.clearInventory(p);
                 p.setFallDistance(0f);
                 if (plugin.getOperatorService() != null) {
                     plugin.getOperatorService().clearPlayer(p.getUniqueId());

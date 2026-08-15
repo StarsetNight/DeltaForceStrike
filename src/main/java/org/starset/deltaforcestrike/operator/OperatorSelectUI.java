@@ -1,4 +1,4 @@
-package org.starset.deltaforcestrike.util;
+package org.starset.deltaforcestrike.operator;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -16,10 +16,6 @@ import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.item.ItemKeys;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.PlayerSession;
-import org.starset.deltaforcestrike.operator.OperatorDefinition;
-import org.starset.deltaforcestrike.operator.OperatorSelectHolder;
-import org.starset.deltaforcestrike.operator.OperatorService;
-import org.starset.deltaforcestrike.operator.SkillDefinition;
 
 import java.util.ArrayList;
 import java.util.List;

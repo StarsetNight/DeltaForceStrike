@@ -142,6 +142,7 @@ public final class BombDropGlowService implements Listener {
         String entry = entityTeamEntry(item);
         for (Player p : match.onlinePlayers()) {
             PlayerSession s = match.getSession(p.getUniqueId());
+            // 本文件同时使用 org.bukkit.scoreboard.Team，故此处用全限定名区分
             if (s == null || s.getTeam() != org.starset.deltaforcestrike.match.Team.T) {
                 continue;
             }

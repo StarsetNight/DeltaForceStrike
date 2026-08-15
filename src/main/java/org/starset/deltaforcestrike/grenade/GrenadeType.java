@@ -1,4 +1,4 @@
-package org.starset.deltaforcestrike.util;
+package org.starset.deltaforcestrike.grenade;
 
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
