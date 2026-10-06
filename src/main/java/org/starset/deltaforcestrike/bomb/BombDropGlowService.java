@@ -23,6 +23,7 @@ import org.starset.deltaforcestrike.item.ItemKeys;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.util.Worlds;
+import org.starset.deltaforcestrike.util.SpigotCompat;
 
 import java.util.Iterator;
 import java.util.Map;
@@ -99,7 +100,7 @@ public final class BombDropGlowService implements Listener {
         }
         item.setGlowing(true);
         item.setCustomNameVisible(true);
-        item.customName(Component.text("改造TNT", NamedTextColor.RED, TextDecoration.BOLD));
+        SpigotCompat.customName(item, Component.text("改造TNT", NamedTextColor.RED, TextDecoration.BOLD));
         item.getPersistentDataContainer().set(
                 ItemKeys.type(), PersistentDataType.STRING, "bomb_drop");
         tracked.put(item.getUniqueId(), item);
@@ -153,7 +154,7 @@ public final class BombDropGlowService implements Listener {
             Team team = board.getTeam(GLOW_TEAM);
             if (team == null) {
                 team = board.registerNewTeam(GLOW_TEAM);
-                team.color(NamedTextColor.RED);
+                SpigotCompat.teamColor(team, NamedTextColor.RED);
                 team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.ALWAYS);
             }
             if (!team.hasEntry(entry)) {

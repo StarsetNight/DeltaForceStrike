@@ -7,6 +7,9 @@
 # Gradle build folder
 build
 
+# Maven build folder
+target/
+
 # IntelliJ
 out/
 .idea
@@ -19,3 +22,5 @@ hs_err_pid*
 
 # Common working directory
 run
+
+target/

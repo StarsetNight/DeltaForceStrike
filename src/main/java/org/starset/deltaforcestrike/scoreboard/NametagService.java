@@ -10,6 +10,7 @@ import org.bukkit.scoreboard.Team;
 import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.PlayerSession;
+import org.starset.deltaforcestrike.util.SpigotCompat;
 
 /**
  * 隐藏敌方头顶铭牌。
@@ -120,7 +121,7 @@ public class NametagService {
     }
 
     /**
-     * Paper/Adventure：用 color(NamedTextColor) 与 prefix(Component)，
+     * 通过兼容层将 Adventure 文本转换为 Spigot 的旧式字符串 API，
      * 避免 ChatColor / setPrefix(String) / setColor(ChatColor)。
      */
     private void configureTeam(Team team, NamedTextColor color, Component prefix, boolean friendlyInvis) {
@@ -128,17 +129,17 @@ public class NametagService {
             return;
         }
 
-        // Paper 1.13+ Adventure Team API
+        // Spigot Team API
         try {
-            team.color(color);
+            SpigotCompat.teamColor(team, color);
         } catch (Throwable t) {
             // 极旧桥接：忽略颜色
             plugin.getLogger().fine("[Nametag] team.color 不可用: " + t.getMessage());
         }
 
         try {
-            team.prefix(prefix == null ? Component.empty() : prefix);
-            team.suffix(Component.empty());
+            SpigotCompat.teamPrefix(team, prefix == null ? Component.empty() : prefix);
+            team.setSuffix("");
         } catch (Throwable t) {
             plugin.getLogger().fine("[Nametag] team.prefix 不可用: " + t.getMessage());
         }

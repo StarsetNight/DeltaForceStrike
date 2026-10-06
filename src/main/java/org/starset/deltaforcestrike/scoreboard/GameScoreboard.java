@@ -47,7 +47,7 @@ public final class GameScoreboard {
         Objective obj = board.registerNewObjective(
                 OBJECTIVE_NAME,
                 Criteria.DUMMY,
-                Component.text("友谊之约", NamedTextColor.GOLD, TextDecoration.BOLD)
+                "DeltaForceStrike"
         );
         obj.setDisplaySlot(DisplaySlot.SIDEBAR);
 
@@ -129,7 +129,7 @@ public final class GameScoreboard {
             obj = board.registerNewObjective(
                     OBJECTIVE_NAME,
                     Criteria.DUMMY,
-                    Component.text("友谊之约", NamedTextColor.GOLD, TextDecoration.BOLD)
+                    "DeltaForceStrike"
             );
             obj.setDisplaySlot(DisplaySlot.SIDEBAR);
         }

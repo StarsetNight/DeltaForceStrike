@@ -35,16 +35,10 @@ public class TabListService {
             default -> "-";
         };
 
-        player.playerListName(
-                Component.text("[" + tag + "] ", color)
-                        .append(Component.text(player.getName() + " ", NamedTextColor.WHITE))
-                        .append(Component.text(s.getKills() + "/" + s.getDeaths(), NamedTextColor.GRAY))
-        );
-        player.displayName(Component.text(player.getName(), color));
-        player.sendPlayerListHeaderAndFooter(
-                Component.text("友谊之约：反制行动", NamedTextColor.GOLD),
-                Component.text("T " + match.getScoreT() + " - " + match.getScoreCT() + " CT", NamedTextColor.YELLOW)
-        );
+        player.setPlayerListName("[" + tag + "] " + player.getName() + " " + s.getKills() + "/" + s.getDeaths());
+        player.setDisplayName(player.getName());
+        player.setPlayerListHeader("DeltaForceStrike");
+        player.setPlayerListFooter("T " + match.getScoreT() + " - " + match.getScoreCT() + " CT");
     }
 
     public void updateAll(Match match) {
@@ -53,8 +47,9 @@ public class TabListService {
     }
 
     public void reset(Player player) {
-        player.playerListName(null);
-        player.displayName(Component.text(player.getName()));
-        player.sendPlayerListHeaderAndFooter(Component.empty(), Component.empty());
+        player.setPlayerListName(player.getName());
+        player.setDisplayName(player.getName());
+        player.setPlayerListHeader("");
+        player.setPlayerListFooter("");
     }
 }

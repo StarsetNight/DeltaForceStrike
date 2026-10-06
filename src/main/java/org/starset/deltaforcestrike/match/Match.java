@@ -2,6 +2,7 @@ package org.starset.deltaforcestrike.match;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.starset.deltaforcestrike.util.SpigotCompat;
 import org.bukkit.entity.Player;
 import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.round.RoundManager;
@@ -124,7 +125,7 @@ public class Match {
     }
 
     public void broadcast(Component component) {
-        for (Player p : onlinePlayers()) p.sendMessage(component);
+        for (Player p : onlinePlayers()) SpigotCompat.sendMessage(p, component);
     }
 
     public void broadcastActionBar(String legacy) {

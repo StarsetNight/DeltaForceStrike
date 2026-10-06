@@ -17,6 +17,7 @@ import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 import org.starset.deltaforcestrike.DeltaForceStrike;
+import org.starset.deltaforcestrike.util.SpigotCompat;
 import org.starset.deltaforcestrike.item.ItemManager;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
@@ -111,7 +112,7 @@ public class GrenadeService {
 
         // 配置开启盾时：举盾不可投
         if (ConfigKeys.shieldEnabled() && player.isBlocking()) {
-            player.sendActionBar(LEGACY.deserialize("§c举盾时无法使用道具"));
+            SpigotCompat.actionBar(player, LEGACY.deserialize("§c举盾时无法使用道具"));
             return true;
         }
 

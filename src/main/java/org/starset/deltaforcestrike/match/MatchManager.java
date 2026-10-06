@@ -625,7 +625,7 @@ public class MatchManager {
             if (s != null && s.getOperatorId() != null) {
                 op = " | " + s.getOperatorId();
             }
-            p.sendActionBar(Component.text(
+            SpigotCompat.actionBar(p, Component.text(
                     "队列 " + match.size() + "/" + max + " | " + team
                             + " | T" + match.countTeam(Team.T) + " CT" + match.countTeam(Team.CT)
                             + extra + op,
@@ -1190,19 +1190,19 @@ public class MatchManager {
         for (Player p : match.onlinePlayers()) {
             PlayerSession s = match.getSession(p.getUniqueId());
             if (winner == Team.NONE) {
-                p.showTitle(Title.title(drawMain, scoreSub, times));
+                SpigotCompat.title(p, Title.title(drawMain, scoreSub, times));
                 p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1f, 1f);
                 continue;
             }
             if (s == null || !s.hasTeam()) {
-                p.showTitle(Title.title(endMain, scoreSub, times));
+                SpigotCompat.title(p, Title.title(endMain, scoreSub, times));
                 continue;
             }
             if (s.getTeam() == winner) {
-                p.showTitle(Title.title(winMain, scoreSub, times));
+                SpigotCompat.title(p, Title.title(winMain, scoreSub, times));
                 p.playSound(p.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1f, 1.1f);
             } else {
-                p.showTitle(Title.title(loseMain, scoreSub, times));
+                SpigotCompat.title(p, Title.title(loseMain, scoreSub, times));
                 p.playSound(p.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.9f, 0.8f);
             }
         }

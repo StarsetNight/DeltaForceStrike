@@ -3,7 +3,6 @@ package org.starset.deltaforcestrike.listener;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
@@ -37,6 +36,7 @@ import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.round.RoundState;
 import org.starset.deltaforcestrike.util.DeathDrops;
 import org.starset.deltaforcestrike.util.Worlds;
+import org.starset.deltaforcestrike.util.SpigotCompat;
 
 import java.time.Duration;
 
@@ -324,7 +324,7 @@ public class GameRulesListener implements Listener {
         if (!Worlds.isArena(p) || !plugin.getMatchManager().isInMatch(p)) {
             return;
         }
-        event.deathMessage(null);
+        event.setDeathMessage(null);
         event.setKeepInventory(false);
         // 掉落已由伪死亡处理；真死时清空 drops 避免双掉
         event.getDrops().clear();
@@ -387,7 +387,7 @@ public class GameRulesListener implements Listener {
     private void showDeathTitle(Player victim, KillInfo info) {
         Component title = Component.text("死亡", NamedTextColor.RED).decorate(TextDecoration.BOLD);
         Component subtitle = buildVictimSubtitle(info);
-        victim.showTitle(Title.title(title, subtitle, Title.Times.times(
+        SpigotCompat.title(victim, Title.title(title, subtitle, Title.Times.times(
                 Duration.ofMillis(100), Duration.ofSeconds(3), Duration.ofMillis(500)
         )));
     }
@@ -447,9 +447,9 @@ public class GameRulesListener implements Listener {
             if (!Worlds.isArena(viewer)) {
                 continue;
             }
-            viewer.sendMessage(message);
+            SpigotCompat.sendMessage(viewer, message);
             if (!viewer.getUniqueId().equals(victim.getUniqueId())) {
-                viewer.sendActionBar(message);
+                SpigotCompat.actionBar(viewer, message);
             }
         }
         pushLiveKill(victim, info);
@@ -534,12 +534,9 @@ public class GameRulesListener implements Listener {
         if (stack.hasItemMeta()) {
             ItemMeta meta = stack.getItemMeta();
             if (meta != null && meta.hasDisplayName()) {
-                Component display = meta.displayName();
-                if (display != null) {
-                    String plain = PlainTextComponentSerializer.plainText().serialize(display);
-                    if (!plain.isEmpty()) {
-                        return plain;
-                    }
+                String display = meta.getDisplayName();
+                if (display != null && !display.isEmpty()) {
+                    return org.bukkit.ChatColor.stripColor(display);
                 }
             }
         }

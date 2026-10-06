@@ -12,6 +12,7 @@ import org.bukkit.entity.TextDisplay;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 import org.starset.deltaforcestrike.DeltaForceStrike;
+import org.starset.deltaforcestrike.util.SpigotCompat;
 import org.starset.deltaforcestrike.item.ItemKeys;
 import org.starset.deltaforcestrike.util.BombSites;
 import org.starset.deltaforcestrike.util.Worlds;
@@ -160,7 +161,7 @@ public final class BombSiteMarkerService {
             removeAllForKey(key);
 
             TextDisplay display = world.spawn(loc, TextDisplay.class, d -> {
-                d.text(text);
+                d.setText(SpigotCompat.legacy(text));
                 d.setBillboard(Display.Billboard.CENTER);
                 d.setSeeThrough(true);
                 d.setShadowed(true);
@@ -187,7 +188,7 @@ public final class BombSiteMarkerService {
                 as.setGravity(false);
                 as.setMarker(true);
                 as.setCustomNameVisible(true);
-                as.customName(Component.text(
+                SpigotCompat.customName(as, Component.text(
                         site.id().toUpperCase(Locale.ROOT) + " 包点",
                         NamedTextColor.RED, TextDecoration.BOLD));
                 as.setPersistent(true);
@@ -211,12 +212,12 @@ public final class BombSiteMarkerService {
         Component text = buildText(site);
         if (e instanceof TextDisplay td) {
             try {
-                td.text(text);
+                td.setText(SpigotCompat.legacy(text));
             } catch (Throwable ignored) {
             }
         } else {
             try {
-                e.customName(Component.text(
+                SpigotCompat.customName(e, Component.text(
                         site.id().toUpperCase(Locale.ROOT) + " 包点",
                         NamedTextColor.RED, TextDecoration.BOLD));
                 e.setCustomNameVisible(true);

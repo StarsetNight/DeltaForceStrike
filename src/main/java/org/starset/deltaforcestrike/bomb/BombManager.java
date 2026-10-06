@@ -1,10 +1,8 @@
 package org.starset.deltaforcestrike.bomb;
 
-import net.kyori.adventure.bossbar.BossBar;
+import org.bukkit.boss.BossBar;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import io.papermc.paper.registry.RegistryAccess;
-import io.papermc.paper.registry.RegistryKey;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -28,6 +26,7 @@ import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.match.Team;
 import org.starset.deltaforcestrike.round.RoundState;
+import org.starset.deltaforcestrike.util.SpigotCompat;
 import org.starset.deltaforcestrike.util.BombSites;
 import org.starset.deltaforcestrike.util.InventorySlots;
 
@@ -150,7 +149,7 @@ public class BombManager {
             return false;
         }
         if (planted) {
-            player.sendActionBar(Component.text("炸弹已安装", NamedTextColor.RED));
+            SpigotCompat.actionBar(player, Component.text("炸弹已安装", NamedTextColor.RED));
             return true;
         }
         if (channelTasks.containsKey(player.getUniqueId())) {
@@ -166,7 +165,7 @@ public class BombManager {
         Location plantLoc = against.getRelative(0, 1, 0).getLocation().add(0.5, 0, 0.5);
         if (!BombSites.isInAnySite(player.getLocation()) && !BombSites.isInAnySite(plantLoc)) {
             player.sendMessage("§c只能在包点安装改造TNT！§7 包点: " + BombSites.describeSites());
-            player.sendActionBar(Component.text("不在包点范围内", NamedTextColor.RED));
+            SpigotCompat.actionBar(player, Component.text("不在包点范围内", NamedTextColor.RED));
             return true;
         }
 
@@ -219,7 +218,7 @@ public class BombManager {
             tnt.setYield(0f);
             tnt.setIsIncendiary(false);
             tnt.setSource(player);
-            tnt.customName(Component.text("改造TNT " + fuseLeft + "s", NamedTextColor.RED));
+            SpigotCompat.customName(tnt, Component.text("改造TNT " + fuseLeft + "s", NamedTextColor.RED));
             tnt.setCustomNameVisible(true);
         });
 
@@ -252,7 +251,7 @@ public class BombManager {
             if (fuseLeft <= 0) {
                 fuseLeft = 0;
                 if (primed != null && primed.isValid()) {
-                    primed.customName(Component.text("改造TNT 0s", NamedTextColor.RED));
+                    SpigotCompat.customName(primed, Component.text("改造TNT 0s", NamedTextColor.RED));
                 }
                 cancelFuse();
                 explode();
@@ -261,7 +260,7 @@ public class BombManager {
 
             if (primed != null && primed.isValid()) {
                 primed.setFuseTicks(Math.max(1, fuseLeft) * 20 + 10);
-                primed.customName(Component.text("改造TNT " + fuseLeft + "s", NamedTextColor.RED));
+                SpigotCompat.customName(primed, Component.text("改造TNT " + fuseLeft + "s", NamedTextColor.RED));
                 primed.getWorld().spawnParticle(
                         Particle.SMOKE, primed.getLocation(), 5, 0.2, 0.2, 0.2, 0.01);
             }
@@ -394,9 +393,7 @@ public class BombManager {
         try {
             String p = path.toLowerCase(Locale.ROOT).replace("minecraft:", "").trim();
             NamespacedKey nk = NamespacedKey.minecraft(p);
-            return RegistryAccess.registryAccess()
-                    .getRegistry(RegistryKey.SOUND_EVENT)
-                    .get(nk);
+            return Sound.valueOf(p.toUpperCase(Locale.ROOT).replace('.', '_'));
         } catch (Throwable t) {
             return null;
         }
@@ -556,7 +553,7 @@ public class BombManager {
             return true;
         }
         if (player.getLocation().distanceSquared(plantLocation) > 9.0) {
-            player.sendActionBar(Component.text("靠近改造TNT才能拆除", NamedTextColor.RED));
+            SpigotCompat.actionBar(player, Component.text("靠近改造TNT才能拆除", NamedTextColor.RED));
             return false;
         }
 
@@ -628,8 +625,8 @@ public class BombManager {
     private void startChannel(Player player, int seconds, Component barName,
                               String type, Runnable onDone) {
         cancelChannel(player);
-        BossBar bar = BossBar.bossBar(barName, 1f, BossBar.Color.RED, BossBar.Overlay.PROGRESS);
-        player.showBossBar(bar);
+        BossBar bar = SpigotCompat.bossBar(barName);
+        bar.addPlayer(player);
         channelBars.put(player.getUniqueId(), bar);
 
         Location start = player.getLocation().clone();
@@ -648,13 +645,13 @@ public class BombManager {
                 return;
             }
             if (player.getLocation().distanceSquared(start) > 0.36) {
-                player.sendActionBar(Component.text("动作被打断", NamedTextColor.RED));
+                SpigotCompat.actionBar(player, Component.text("动作被打断", NamedTextColor.RED));
                 cancelChannel(player);
                 return;
             }
             tick[0]++;
             channelElapsedTicks = tick[0];
-            bar.progress(Math.max(0f, 1f - (float) tick[0] / total));
+            bar.setProgress(Math.max(0d, 1d - (double) tick[0] / total));
             if (tick[0] >= total) {
                 cancelChannel(player);
                 onDone.run();
@@ -672,7 +669,7 @@ public class BombManager {
         BossBar bar = channelBars.remove(id);
         if (bar != null) {
             try {
-                player.hideBossBar(bar);
+                bar.removePlayer(player);
             } catch (Exception ignored) {
             }
         }

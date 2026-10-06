@@ -1,7 +1,7 @@
 name: DeltaForceStrike
 version: '${version}'
 main: org.starset.deltaforcestrike.DeltaForceStrike
-api-version: '26.2'
+api-version: '1.21'
 author: 川崎星夕
 description: 友谊之约：反制行动 - 5v5 回合制战术竞技
 

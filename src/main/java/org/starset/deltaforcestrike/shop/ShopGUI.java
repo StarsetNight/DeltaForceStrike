@@ -20,6 +20,7 @@ import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.PlayerSession;
 import org.starset.deltaforcestrike.round.RoundState;
 import org.starset.deltaforcestrike.util.ConfigKeys;
+import org.starset.deltaforcestrike.util.SpigotCompat;
 
 import java.util.List;
 import java.util.Locale;
@@ -47,14 +48,14 @@ public final class ShopGUI {
                 .hoverEvent(HoverEvent.showText(Component.text(
                         "点击打开购买界面\n当前资金 $" + money, NamedTextColor.YELLOW)));
 
-        player.sendMessage(Component.empty());
-        player.sendMessage(Component.text("──────── 购买阶段 ────────", NamedTextColor.GOLD));
-        player.sendMessage(Component.text("  资金 ", NamedTextColor.GRAY)
+        SpigotCompat.sendMessage(player, Component.empty());
+        SpigotCompat.sendMessage(player, Component.text("──────── 购买阶段 ────────", NamedTextColor.GOLD));
+        SpigotCompat.sendMessage(player, Component.text("  资金 ", NamedTextColor.GRAY)
                 .append(Component.text("$" + money, NamedTextColor.YELLOW))
                 .append(Component.text("  "))
                 .append(btn));
-        player.sendMessage(Component.text("  关闭后可再次点击上方按钮", NamedTextColor.DARK_GRAY));
-        player.sendMessage(Component.text("────────────────────────", NamedTextColor.GOLD));
+        SpigotCompat.sendMessage(player, Component.text("  关闭后可再次点击上方按钮", NamedTextColor.DARK_GRAY));
+        SpigotCompat.sendMessage(player, Component.text("────────────────────────", NamedTextColor.GOLD));
     }
 
     public static void broadcastChatButtons(org.starset.deltaforcestrike.match.Match match) {
@@ -86,7 +87,7 @@ public final class ShopGUI {
         }
 
         ShopHolder holder = new ShopHolder();
-        Inventory inv = Bukkit.createInventory(holder, 54, TITLE);
+        Inventory inv = Bukkit.createInventory(holder, 54, SpigotCompat.legacy(TITLE));
         holder.setInventory(inv);
 
         ItemManager im = plugin.getItemManager();
@@ -119,8 +120,8 @@ public final class ShopGUI {
 
         ItemStack info = new ItemStack(Material.GOLD_INGOT);
         ItemMeta meta = info.getItemMeta();
-        meta.displayName(Component.text("资金: $" + session.getMoney(), NamedTextColor.GOLD));
-        meta.lore(List.of(
+        SpigotCompat.itemName(meta, Component.text("资金: $" + session.getMoney(), NamedTextColor.GOLD));
+        SpigotCompat.itemLore(meta, List.of(
                 Component.text("点击商品购买", NamedTextColor.GRAY),
                 Component.text("轻型护甲 = 锁链套", NamedTextColor.DARK_GRAY)
         ));
@@ -169,8 +170,8 @@ public final class ShopGUI {
         ItemMeta meta = icon.getItemMeta();
         if (meta != null) {
             String name = gi.getName() == null ? used : gi.getName().replaceAll("§[0-9a-fk-orA-FK-OR]", "");
-            meta.displayName(Component.text(name + " $" + gi.getPrice(), NamedTextColor.WHITE));
-            meta.lore(List.of(
+            SpigotCompat.itemName(meta, Component.text(name + " $" + gi.getPrice(), NamedTextColor.WHITE));
+            SpigotCompat.itemLore(meta, List.of(
                     Component.text("价格: $" + gi.getPrice(), NamedTextColor.YELLOW),
                     Component.text("点击购买", NamedTextColor.GRAY)
             ));

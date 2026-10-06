@@ -1,6 +1,5 @@
 plugins {
     id("java-library")
-    id("xyz.jpenilla.run-paper") version "3.0.2"
 }
 
 group = "org.starset"
@@ -8,21 +7,23 @@ version = "1.4.1"
 
 repositories {
     mavenCentral()
-    maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:26.2.build.+")
+    compileOnly("org.spigotmc:spigot-api:1.21.8-R0.1-SNAPSHOT")
+    implementation("net.kyori:adventure-api:4.17.0")
+    implementation("net.kyori:adventure-text-serializer-legacy:4.17.0")
 }
 
 java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
+    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 }
 
 tasks {
-    runServer {
-        minecraftVersion("26.2")
-        jvmArgs("-Xms2G", "-Xmx2G")
+    jar {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
     }
 
     processResources {
@@ -36,6 +37,6 @@ tasks {
 
     compileJava {
         options.encoding = "UTF-8"
-        options.release.set(25)
+        options.release.set(21)
     }
 }
