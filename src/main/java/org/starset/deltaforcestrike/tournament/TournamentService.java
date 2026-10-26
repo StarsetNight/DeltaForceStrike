@@ -178,8 +178,10 @@ public final class TournamentService {
     }
 
     static int compareVer(String a, String b) {
-        String[] as = a.split("\\.");
-        String[] bs = b.split("\\.");
+        // 先整体剥掉预发布/构建后缀（-beta.1、+build.5），再按点分段；
+        // 否则 "1.2.3-beta.1" 的末尾 1 会被当成第四段
+        String[] as = stripSuffix(a).split("\\.");
+        String[] bs = stripSuffix(b).split("\\.");
         int len = Math.max(as.length, bs.length);
         for (int i = 0; i < len; i++) {
             int ai = i < as.length ? parseInt(as[i]) : 0;
@@ -187,6 +189,18 @@ public final class TournamentService {
             if (ai != bi) return Integer.compare(ai, bi);
         }
         return 0;
+    }
+
+    private static String stripSuffix(String v) {
+        if (v == null) {
+            return "";
+        }
+        int cut = v.length();
+        int dash = v.indexOf('-');
+        int plus = v.indexOf('+');
+        if (dash >= 0) cut = Math.min(cut, dash);
+        if (plus >= 0) cut = Math.min(cut, plus);
+        return v.substring(0, cut);
     }
 
     public int verifiedCount() {
