@@ -20,6 +20,7 @@ public class ReconArrowHandler implements SkillHandler {
         try {
             arrow.setPickupStatus(AbstractArrow.PickupStatus.DISALLOWED);
         } catch (Throwable ignored) {
+            ctx.plugin().getLogger().log(java.util.logging.Level.FINE, "Recon arrow pickup lock failed for " + p.getUniqueId(), ignored);
         }
         arrow.getPersistentDataContainer().set(
                 OperatorKeys.reconArrow(), PersistentDataType.BYTE, (byte) 1);

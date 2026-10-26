@@ -68,6 +68,7 @@ public class SummonVexHandler implements SkillHandler {
             try {
                 vex.setRemoveWhenFarAway(true);
             } catch (Throwable ignored) {
+                ctx.plugin().getLogger().log(java.util.logging.Level.FINE, "Summoned vex despawn setup failed for " + p.getUniqueId(), ignored);
             }
             // 打召唤标记：回合结束/对局结束时由 OperatorService.cleanupSummonedEntities 清除，
             // 防止跨回合残留并攻击购买阶段的玩家

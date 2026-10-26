@@ -23,7 +23,7 @@ import java.util.List;
  * 向安装了 ClientUI 的玩家推送 CS2 风格 HUD 数据。
  * 频道: {@value #CHANNEL}
  */
-public final class HudSyncService implements PluginMessageListener {
+public final class HudSyncService implements PluginMessageListener, org.bukkit.event.Listener {
 
     public static final String CHANNEL = "deltaforcestrike:hud";
     private static final byte PROTOCOL = 4;
@@ -49,6 +49,11 @@ public final class HudSyncService implements PluginMessageListener {
     /** 客户端拉取节流：同一玩家 500ms 内最多响应一次，防恶意刷包触发全背包扫描 */
     private static final long REQUEST_THROTTLE_MS = 500;
     private final java.util.Map<java.util.UUID, Long> lastRequestMs = new java.util.HashMap<>();
+
+    @org.bukkit.event.EventHandler
+    public void onPlayerQuit(org.bukkit.event.player.PlayerQuitEvent event) {
+        lastRequestMs.remove(event.getPlayer().getUniqueId());
+    }
 
     @Override
     public void onPluginMessageReceived(String channel, Player player, byte[] message) {
@@ -112,6 +117,7 @@ public final class HudSyncService implements PluginMessageListener {
             out.writeBoolean(false);
             player.sendPluginMessage(plugin, CHANNEL, baos.toByteArray());
         } catch (IOException ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Inactive HUD synchronization failed for " + player.getUniqueId(), ignored);
         }
     }
 

@@ -442,6 +442,7 @@ public class OperatorService {
         try {
             meta.setMaxStackSize(1);
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Skill item stack limit setup failed: ", ignored);
         }
 
         stack.setItemMeta(meta);
@@ -795,7 +796,7 @@ public class OperatorService {
             }
         }
 
-        tickAierPassive(match);
+        tickPassives(match);
     }
 
     /**
@@ -850,12 +851,11 @@ public class OperatorService {
         if (def == null || def.getPassive() == null) {
             return;
         }
-        String handler = def.getPassive().getHandlerId();
-        if ("sneak_speed".equalsIgnoreCase(handler) || "wulong".equals(def.getId())) {
-            if (p.isSneaking()) {
-                int amp = def.getPassive().getInt("amplifier", 1);
-                p.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, 40, amp, false, false, true));
-            }
+        String handlerId = "wulong".equals(def.getId())
+                ? "sneak_speed" : def.getPassive().getHandlerId();
+        var handler = handlers.getPassive(handlerId);
+        if (handler != null && handler.apply(new SkillContext(
+                plugin, p, plugin.getMatchManager().getMatch(), load, def.getPassive(), SkillKind.PASSIVE))) {
             return;
         }
         for (PotionSpec spec : def.getPassive().getEffects()) {
@@ -922,50 +922,23 @@ public class OperatorService {
         world.spawnParticle(Particle.CLOUD, c.clone().add(0, 1, 0), cloud, r * 0.4, 1.0, r * 0.4, 0.02);
     }
 
-    private void tickAierPassive(Match match) {
-        for (Player aier : match.onlinePlayers()) {
-            OperatorLoadout load = getLoadout(aier.getUniqueId());
+    private void tickPassives(Match match) {
+        for (Player player : match.onlinePlayers()) {
+            OperatorLoadout load = getLoadout(player.getUniqueId());
             if (load == null || load.getDefinition() == null) {
                 continue;
             }
-            if (!"aier".equals(load.getDefinition().getId())) {
-                continue;
-            }
-            PlayerSession as = match.getSession(aier.getUniqueId());
-            if (as == null || !as.isAlive()) {
-                continue;
-            }
-            for (Player mate : match.onlinePlayers()) {
-                PlayerSession ms = match.getSession(mate.getUniqueId());
-                if (ms == null || ms.getTeam() != as.getTeam() || !ms.isAlive()) {
-                    continue;
-                }
-                for (PotionEffect pe : mate.getActivePotionEffects()) {
-                    if (isNegative(pe.getType())) {
-                        mate.removePotionEffect(pe.getType());
-                    }
-                }
+            OperatorDefinition def = load.getDefinition();
+            SkillDefinition passive = def.getPassive();
+            // Preserve the legacy Aier fallback, including definitions without a passive section.
+            String handlerId = "aier".equals(def.getId()) ? "team_cleanse"
+                    : passive == null ? null : passive.getHandlerId();
+            var handler = handlers.getPassive(handlerId);
+            if (handler != null) {
+                handler.tick(new SkillContext(plugin, player, match, load, passive, SkillKind.PASSIVE));
             }
         }
     }
-
-    private boolean isNegative(PotionEffectType t) {
-        if (t == null) {
-            return false;
-        }
-        return t.equals(PotionEffectType.POISON)
-                || t.equals(PotionEffectType.WITHER)
-                || t.equals(PotionEffectType.SLOWNESS)
-                || t.equals(PotionEffectType.MINING_FATIGUE)
-                || t.equals(PotionEffectType.BLINDNESS)
-                || t.equals(PotionEffectType.HUNGER)
-                || t.equals(PotionEffectType.WEAKNESS)
-                || t.equals(PotionEffectType.LEVITATION)
-                || t.equals(PotionEffectType.UNLUCK)
-                || t.equals(PotionEffectType.DARKNESS)
-                || t.equals(PotionEffectType.INSTANT_DAMAGE);
-    }
-
     /**
      * 清除大招带来的临时增益（按 loadout 记录的效果类型精确清除，
      * 另保留常见增益作兜底）。随后 onRoundStart 会 applyPassive 续上被动。
@@ -983,6 +956,7 @@ public class OperatorService {
                 try {
                     p.removePotionEffect(type);
                 } catch (Throwable ignored) {
+                    plugin.getLogger().log(java.util.logging.Level.FINE, "Ultimate effect cleanup failed for " + p.getUniqueId(), ignored);
                 }
             }
             load.clearUltimateEffectTypes();
@@ -994,6 +968,7 @@ public class OperatorService {
         try {
             p.removePotionEffect(PotionEffectType.JUMP_BOOST);
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Jump boost cleanup failed for " + p.getUniqueId(), ignored);
         }
     }
 
@@ -1033,6 +1008,7 @@ public class OperatorService {
             try {
                 t.cancel();
             } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Skill effect task cancellation failed: ", ignored);
             }
         }
         activeEffectTasks.clear();

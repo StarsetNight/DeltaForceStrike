@@ -139,7 +139,6 @@ round:
 player:
   drop-equipment: false
   armor-vanish: true
-  allow-diamond-armor: false
   shield-enabled: false
 
 spectator:

@@ -52,7 +52,9 @@ public final class SpectatorRoleManager {
         if (plugin.getSpectatorLockService() != null) {
             plugin.getSpectatorLockService().clear(player);
         }
-        try { player.setSpectatorTarget(null); } catch (Throwable ignored) {}
+        try { player.setSpectatorTarget(null); } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Spectator setup target cleanup failed for " + player.getUniqueId(), ignored);
+        }
 
         PlayerState.clearInventory(player);
         PlayerState.clearPotionEffects(player);
@@ -126,19 +128,25 @@ public final class SpectatorRoleManager {
             break;
         }
         if (target != null) {
-            try { p.setSpectatorTarget(target); } catch (Throwable ignored) {}
+            try { p.setSpectatorTarget(target); } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Spectator attachment failed for " + p.getUniqueId(), ignored);
+            }
         }
     }
 
     /** 退场时由 MatchManager 调用：清理 role */
     public void clear(Player player) {
         if (player == null) return;
-        try { player.setSpectatorTarget(null); } catch (Throwable ignored) {}
+        try { player.setSpectatorTarget(null); } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Spectator exit target cleanup failed for " + player.getUniqueId(), ignored);
+        }
         try {
             if (player.getGameMode() == GameMode.SPECTATOR) {
                 player.setGameMode(GameMode.ADVENTURE);
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Spectator exit game mode restore failed for " + player.getUniqueId(), ignored);
+        }
     }
 
     /** 把某人提升为导播 */

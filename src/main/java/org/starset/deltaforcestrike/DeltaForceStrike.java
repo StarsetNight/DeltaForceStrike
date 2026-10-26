@@ -131,6 +131,7 @@ public final class DeltaForceStrike extends JavaPlugin {
         // ---------- 监听器 ----------
         inventoryLockListener = new InventoryLockListener(this);
 
+        getServer().getPluginManager().registerEvents(hudSyncService, this);
         getServer().getPluginManager().registerEvents(new ArenaPlayerListener(this), this);
         getServer().getPluginManager().registerEvents(inventoryLockListener, this);
         getServer().getPluginManager().registerEvents(new ItemProtectListener(this), this);

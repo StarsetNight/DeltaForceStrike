@@ -8,6 +8,7 @@ import java.util.Map;
 public final class SkillHandlerRegistry {
 
     private final Map<String, SkillHandler> handlers = new HashMap<>();
+    private final Map<String, PassiveSkillHandler> passiveHandlers = new HashMap<>();
 
     public SkillHandlerRegistry() {
         register(new DashHandler());
@@ -24,10 +25,20 @@ public final class SkillHandlerRegistry {
         register(new WindChargeHandler());
         register(new GlobalSilenceHandler());
         register(new NoopHandler());
+        registerPassive(new TeamCleanseHandler());
+        registerPassive(new SneakSpeedHandler());
     }
 
     public void register(SkillHandler handler) {
         handlers.put(handler.id().toLowerCase(), handler);
+    }
+
+    public void registerPassive(PassiveSkillHandler handler) {
+        passiveHandlers.put(handler.id().toLowerCase(java.util.Locale.ROOT), handler);
+    }
+
+    public PassiveSkillHandler getPassive(String id) {
+        return id == null ? null : passiveHandlers.get(id.toLowerCase(java.util.Locale.ROOT));
     }
 
     public SkillHandler get(String id) {
