@@ -334,6 +334,8 @@ DeltaForceStrike
 
 ### 1. 构建插件
 
+需要 JDK 25（Gradle toolchain 会自动选用本机已安装的 JDK 25）。仓库自带 Gradle Wrapper，首次运行会下载 Gradle 9.6.1。
+
 ```bash
 ./gradlew build
 ```
