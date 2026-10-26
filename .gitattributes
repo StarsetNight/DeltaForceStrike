@@ -16,6 +16,8 @@
 *.html          text eol=lf
 *.md            text eol=lf
 LICENSE         text eol=lf
+.gitattributes  text eol=lf
+.gitignore      text eol=lf
 
 # Binary files should be left untouched
 *.jar           binary
