@@ -66,7 +66,9 @@ public class BombListener implements Listener {
     public void onSneak(PlayerToggleSneakEvent event) {
         if (!Worlds.isArena(event.getPlayer())) return;
         if (!event.isSneaking()) {
-            plugin.getBombManager().cancelChannel(event.getPlayer());
+            // 松开 Shift 只打断拆包读条（CS 式“松手即停”），
+            // 不能误杀进行中的安装读条
+            plugin.getBombManager().cancelDefuseChannel(event.getPlayer());
             return;
         }
         plugin.getBombManager().tryBeginDefuse(event.getPlayer());

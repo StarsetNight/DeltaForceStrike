@@ -186,16 +186,8 @@ public class PickupListener implements Listener {
     }
 
     private boolean isBomb(ItemManager items, ItemStack stack, String id, String type, String action) {
-        if (stack == null || stack.getType().isAir()) {
-            return false;
-        }
-        if ("defuse".equalsIgnoreCase(action) || "defuse".equalsIgnoreCase(type)) {
-            return false;
-        }
-        if ("plant".equalsIgnoreCase(action) || "bomb".equalsIgnoreCase(type)) {
-            return true;
-        }
-        return id != null && id.contains("plant-bomb");
+        // 统一判定委托给 ItemManager（排除拆除钳；type=bomb / action=plant / id 含 plant-bomb）
+        return items.isPlantBomb(stack);
     }
 
     private boolean isDefuseKit(ItemManager items, ItemStack stack, String id, String type, String action) {

@@ -1,12 +1,10 @@
 package org.starset.deltaforcestrike.grenade;
 
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
-import org.bukkit.entity.AreaEffectCloud;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Snowball;
 import org.bukkit.inventory.EquipmentSlot;
@@ -27,6 +25,8 @@ import org.starset.deltaforcestrike.grenade.GrenadeKeys;
 import org.starset.deltaforcestrike.grenade.GrenadeType;
 import org.starset.deltaforcestrike.util.Worlds;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -39,8 +39,55 @@ public class GrenadeService {
     private static final LegacyComponentSerializer LEGACY =
             LegacyComponentSerializer.legacySection();
 
+    /** 活跃的持续效果任务（烟雾/凋零粒子等），回合结束时统一取消 */
+    private final List<BukkitRunnable> activeEffectTasks = new ArrayList<>();
+
     public GrenadeService(DeltaForceStrike plugin) {
         this.plugin = plugin;
+    }
+
+    /**
+     * 回合边界回收：取消所有仍在跑的持续效果任务，
+     * 避免烟雾/凋零粒子跨过 ROUND_END 残留到下一回合。
+     */
+    public void cleanupRound() {
+        for (BukkitRunnable t : activeEffectTasks) {
+            try {
+                t.cancel();
+            } catch (Throwable ignored) {
+            }
+        }
+        activeEffectTasks.clear();
+    }
+
+    private void track(BukkitRunnable task) {
+        activeEffectTasks.add(task);
+    }
+
+    private void untrack(BukkitRunnable task) {
+        activeEffectTasks.remove(task);
+    }
+
+    /** 是否对目标玩家生效（友军过滤：grenade.team-damage 默认关闭）。技能效果复用同一规则 */
+    public boolean shouldAffect(Player target, Player thrower) {
+        if (thrower == null || target == null
+                || target.getUniqueId().equals(thrower.getUniqueId())) {
+            return true;
+        }
+        if (plugin.getConfig().getBoolean("grenade.team-damage", false)) {
+            return true;
+        }
+        Match match = plugin.getMatchManager().getMatch();
+        if (match == null) {
+            return true;
+        }
+        PlayerSession ts = match.getSession(thrower.getUniqueId());
+        PlayerSession ss = match.getSession(target.getUniqueId());
+        if (ts == null || ss == null) {
+            return true;
+        }
+        return ts.getTeam() == org.starset.deltaforcestrike.match.Team.NONE
+                || ss.getTeam() != ts.getTeam();
     }
 
     // ------------------------------------------------------------------
@@ -237,14 +284,16 @@ public class GrenadeService {
         int durationTicks = plugin.getConfig().getInt("grenade.smoke.duration-ticks", 160);
         double radius = plugin.getConfig().getDouble("grenade.smoke.radius", 6.0);
         boolean darkness = plugin.getConfig().getBoolean("grenade.smoke.apply-darkness", false);
+        Match match = plugin.getMatchManager().getMatch();
 
-        new BukkitRunnable() {
+        BukkitRunnable task = new BukkitRunnable() {
             int t = 0;
 
             @Override
             public void run() {
                 if (t >= durationTicks) {
                     cancel();
+                    untrack(this);
                     return;
                 }
                 if (t % 2 == 0) {
@@ -277,15 +326,25 @@ public class GrenadeService {
                 }
                 if (darkness && t % 20 == 0) {
                     for (Player p : world.getPlayers()) {
-                        if (p.getLocation().distanceSquared(center) <= radius * radius) {
-                            p.addPotionEffect(new PotionEffect(
-                                    PotionEffectType.DARKNESS, 30, 0, false, false, true));
+                        if (!plugin.getMatchManager().isInMatch(p)) {
+                            continue;
                         }
+                        if (p.getLocation().distanceSquared(center) > radius * radius) {
+                            continue;
+                        }
+                        PlayerSession s = match == null ? null : match.getSession(p.getUniqueId());
+                        if (s != null && !s.isAlive()) {
+                            continue;
+                        }
+                        p.addPotionEffect(new PotionEffect(
+                                PotionEffectType.DARKNESS, 30, 0, false, false, true));
                     }
                 }
                 t++;
             }
-        }.runTaskTimer(plugin, 0L, 1L);
+        };
+        task.runTaskTimer(plugin, 0L, 1L);
+        track(task);
     }
 
     // ------------------------------------------------------------------
@@ -304,33 +363,18 @@ public class GrenadeService {
         int durationTicks = plugin.getConfig().getInt("grenade.wither.duration-ticks", 120);
         float radius = (float) plugin.getConfig().getDouble("grenade.wither.radius", 6.0);
         int amplifier = plugin.getConfig().getInt("grenade.wither.amplifier", 0);
+        Match match = plugin.getMatchManager().getMatch();
 
-        world.spawn(center.clone().add(0, 0.2, 0), AreaEffectCloud.class, c -> {
-            c.setRadius(radius);
-            c.setDuration(durationTicks);
-            c.setRadiusPerTick(0f);
-            c.setRadiusOnUse(0f);
-            c.setWaitTime(10);
-            c.setReapplicationDelay(20);
-            c.setSource(thrower);
-            try {
-                c.setParticle(Particle.ENTITY_EFFECT, Color.fromRGB(40, 40, 40));
-            } catch (Throwable t) {
-                c.setParticle(Particle.SMOKE);
-            }
-            c.addCustomEffect(
-                    new PotionEffect(PotionEffectType.WITHER, 40, amplifier, false, true, true),
-                    true
-            );
-        });
-
-        new BukkitRunnable() {
+        // 用受控任务替代 AreaEffectCloud：AEC 是真实实体且无法按队伍过滤，
+        // 会跨回合残留并对友军无差别施效
+        BukkitRunnable task = new BukkitRunnable() {
             int t = 0;
 
             @Override
             public void run() {
                 if (t >= durationTicks) {
                     cancel();
+                    untrack(this);
                     return;
                 }
                 if (t % 4 == 0) {
@@ -344,9 +388,30 @@ public class GrenadeService {
                             0.01
                     );
                 }
+                if (t % 20 == 0) {
+                    for (Player p : world.getPlayers()) {
+                        if (!plugin.getMatchManager().isInMatch(p)) {
+                            continue;
+                        }
+                        if (p.getLocation().distanceSquared(center) > radius * radius) {
+                            continue;
+                        }
+                        PlayerSession s = match == null ? null : match.getSession(p.getUniqueId());
+                        if (s != null && !s.isAlive()) {
+                            continue;
+                        }
+                        if (!shouldAffect(p, thrower)) {
+                            continue;
+                        }
+                        p.addPotionEffect(new PotionEffect(
+                                PotionEffectType.WITHER, 40, amplifier, false, true, true));
+                    }
+                }
                 t++;
             }
-        }.runTaskTimer(plugin, 0L, 1L);
+        };
+        task.runTaskTimer(plugin, 0L, 1L);
+        track(task);
     }
 
     // ------------------------------------------------------------------
@@ -390,12 +455,17 @@ public class GrenadeService {
                 continue;
             }
 
+            boolean isSelf = thrower != null && p.getUniqueId().equals(thrower.getUniqueId());
+            // 友军保护：默认不伤队友（grenade.team-damage=true 恢复无差别）
+            if (!isSelf && !shouldAffect(p, thrower)) {
+                continue;
+            }
+
             double dist = p.getLocation().distance(center);
             if (dist > radius) {
                 continue;
             }
 
-            boolean isSelf = thrower != null && p.getUniqueId().equals(thrower.getUniqueId());
             if (!(isSelf && !selfDamage)) {
                 double falloff = 1.0 - (dist / radius);
                 p.damage(Math.max(1.0, damage * falloff), thrower);

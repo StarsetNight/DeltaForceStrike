@@ -103,7 +103,14 @@ economy:
   start-money: 800
   # 经济上限：任何途径获得金钱后都不会超过此值
   max-money: 16000
+  # 回合胜利奖励：未配置下面两个分型键时回退到 victory-bonus
   victory-bonus: 3200
+  # 歼灭/超时胜利（CS: 3250）
+  win-reward-elimination: 3250
+  # 爆弹/拆包胜利（CS: 3500）
+  win-reward-bomb: 3500
+  # T 已下包但输掉回合的整队额外奖励（CS: +800）
+  lose-reward-planted-bonus: 800
   # 败方分档奖励（按连败次数取档，即连败补偿）
   defeat-bonus:
     - 2000
@@ -111,6 +118,8 @@ economy:
     - 3100
   pistol-round-bonus: 2550
   kill-reward: 300
+  # 近战（刀）击杀奖励，可用物品级 kill-reward 覆盖
+  kill-reward-melee: 1500
   plant-reward: 300
   defuse-reward: 200
 
@@ -148,6 +157,8 @@ bomb:
   damage: 50
   damage-radius: 60
   damage-falloff: true
+  # 距离衰减后的最低伤害（0 关闭保底）
+  damage-min: 2.0
   # 安放后滴滴（音符盒）；>10s 慢滴半径 50；≤10s 加速且半径扩到 200
   beep:
     enabled: true
@@ -178,6 +189,8 @@ bomb:
 
 grenade:
   particle-multiplier: 2.0
+  # 道具/技能效果是否伤害/影响友军（默认关闭 = 友军免疫）
+  team-damage: false
   smoke:
     duration-ticks: 160 # 8 秒
     radius: 6.0

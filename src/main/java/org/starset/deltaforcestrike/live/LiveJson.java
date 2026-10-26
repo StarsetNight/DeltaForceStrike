@@ -41,6 +41,12 @@ public final class LiveJson {
 
     public static String num(double v) {
         if (Double.isNaN(v) || Double.isInfinite(v)) {
+            // 保证合法 JSON，但不能静默吞掉上游异常数据
+            java.util.logging.Logger log = java.util.logging.Logger.getLogger("DeltaForceStrike");
+            if (!warnedNonFinite) {
+                warnedNonFinite = true;
+                log.warning("[LiveJson] 数值字段出现 NaN/Infinity，已按 0 输出（仅提示一次）");
+            }
             return "0";
         }
         if (v == (long) v) {
@@ -48,6 +54,8 @@ public final class LiveJson {
         }
         return Double.toString(v);
     }
+
+    private static boolean warnedNonFinite;
 
     public static String bool(boolean b) {
         return b ? "true" : "false";

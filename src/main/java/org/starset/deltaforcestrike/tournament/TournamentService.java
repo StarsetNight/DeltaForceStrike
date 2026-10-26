@@ -163,7 +163,16 @@ public final class TournamentService {
     }
 
     private static int parseInt(String s) {
-        try { return Integer.parseInt(s.trim()); } catch (Exception e) { return 0; }
+        // 剥掉预发布后缀（"3-beta" → 3），避免预发布版本被当成 0 而误放行
+        String digits = s.trim().replaceAll("[^0-9].*$", "");
+        if (digits.isEmpty()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(digits);
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private static int compareVer(String a, String b) {

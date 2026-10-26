@@ -159,19 +159,20 @@ public final class LiveSnapshotService {
         m.put("secondsLeft", LiveJson.num(Math.max(0, secondsLeft)));
         m.put("winTarget", LiveJson.num(match.isOvertime()
                 ? match.overtimeWinTarget()
-                : plugin.getConfig().getInt("match.win-target", 13)));
+                : org.starset.deltaforcestrike.config.ConfigKeys.winTarget(false)));
         m.put("halfRound", LiveJson.num(match.isOvertime()
-                ? plugin.getConfig().getInt("overtime.half-round", 3)
-                : plugin.getConfig().getInt("match.half-round", 12)));
+                ? org.starset.deltaforcestrike.config.ConfigKeys.halfRound(true)
+                : org.starset.deltaforcestrike.config.ConfigKeys.halfRound(false)));
         m.put("halfSwapped", LiveJson.bool(match.getRoundManager().isHalfTimeSwapped()));
         m.put("overtime", LiveJson.bool(match.isOvertime()));
         if (match.isOvertime()) {
             m.put("otCount", LiveJson.num(match.getOvertimeCount()));
             m.put("otWinTarget", LiveJson.num(match.overtimeWinTarget()));
-            m.put("otHalfRound", LiveJson.num(plugin.getConfig().getInt("overtime.half-round", 3)));
+            m.put("otHalfRound", LiveJson.num(org.starset.deltaforcestrike.config.ConfigKeys.halfRound(true)));
             m.put("otHalfSwapped", LiveJson.bool(match.getRoundManager().isHalfTimeSwapped()));
         }
-        m.put("maxPlayers", LiveJson.num(match.size()));
+        // 当前在局人数（不含大厅）；maxPlayers 键名曾误导消费者，已更名
+        m.put("playerCount", LiveJson.num(match.size()));
         m.put("bombPlanted", LiveJson.bool(bombPlanted));
         m.put("fuseLeft", LiveJson.num(fuseLeft));
 
@@ -205,15 +206,28 @@ public final class LiveSnapshotService {
         }
 
         ItemManager items = plugin.getItemManager();
-        // 每队编号：按进 session 顺序 1..n（稳定，与雷达一致）
-        int numT = 0;
-        int numCT = 0;
+        // 队内编号：固定在 session 上（整局稳定），避免重连/退赛重排
+        int maxT = 0;
+        int maxCT = 0;
+        for (PlayerSession s : match.getSessions().values()) {
+            if (s.getTeam() == Team.T) {
+                maxT = Math.max(maxT, s.getSquadNumber());
+            } else if (s.getTeam() == Team.CT) {
+                maxCT = Math.max(maxCT, s.getSquadNumber());
+            }
+        }
         Map<UUID, Integer> numbers = new LinkedHashMap<>();
         for (PlayerSession s : match.getSessions().values()) {
             if (s.getTeam() == Team.T) {
-                numbers.put(s.getUuid(), ++numT);
+                if (s.getSquadNumber() <= 0) {
+                    s.setSquadNumber(++maxT);
+                }
+                numbers.put(s.getUuid(), s.getSquadNumber());
             } else if (s.getTeam() == Team.CT) {
-                numbers.put(s.getUuid(), ++numCT);
+                if (s.getSquadNumber() <= 0) {
+                    s.setSquadNumber(++maxCT);
+                }
+                numbers.put(s.getUuid(), s.getSquadNumber());
             } else {
                 numbers.put(s.getUuid(), 0);
             }

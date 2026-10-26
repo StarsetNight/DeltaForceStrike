@@ -69,6 +69,14 @@ public class SummonVexHandler implements SkillHandler {
                 vex.setRemoveWhenFarAway(true);
             } catch (Throwable ignored) {
             }
+            // 打召唤标记：回合结束/对局结束时由 OperatorService.cleanupSummonedEntities 清除，
+            // 防止跨回合残留并攻击购买阶段的玩家
+            vex.getPersistentDataContainer().set(
+                    org.starset.deltaforcestrike.operator.OperatorKeys.SUMMON_MARKER,
+                    org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+            vex.getPersistentDataContainer().set(
+                    org.starset.deltaforcestrike.operator.OperatorKeys.SUMMON_OWNER,
+                    org.bukkit.persistence.PersistentDataType.STRING, ownerId.toString());
             spawned.add(vex);
         }
 

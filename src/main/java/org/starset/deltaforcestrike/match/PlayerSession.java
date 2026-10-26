@@ -22,6 +22,8 @@ public class PlayerSession {
     private boolean deathCounted;
     /** 在对局中的角色：参赛 / 占名额观战 / 不占名额导播 */
     private SpectatorRole role = SpectatorRole.PLAYING;
+    /** 本局队内编号（导播/雷达显示用）：按队伍分配且整局稳定，重连不重排 */
+    private int squadNumber;
 
     public PlayerSession(Player player, int startMoney) {
         this.uuid = player.getUniqueId();
@@ -114,12 +116,20 @@ public class PlayerSession {
         kills++;
     }
 
+    public void setKills(int kills) {
+        this.kills = Math.max(0, kills);
+    }
+
     public int getDeaths() {
         return deaths;
     }
 
     public void addDeath() {
         deaths++;
+    }
+
+    public void setDeaths(int deaths) {
+        this.deaths = Math.max(0, deaths);
     }
 
     public boolean isAlive() {
@@ -170,5 +180,13 @@ public class PlayerSession {
 
     public void setConnected(boolean connected) {
         this.connected = connected;
+    }
+
+    public int getSquadNumber() {
+        return squadNumber;
+    }
+
+    public void setSquadNumber(int n) {
+        this.squadNumber = Math.max(0, n);
     }
 }

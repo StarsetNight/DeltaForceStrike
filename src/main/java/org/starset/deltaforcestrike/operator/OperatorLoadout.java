@@ -1,7 +1,10 @@
 package org.starset.deltaforcestrike.operator;
 
 import org.bukkit.Location;
+import org.bukkit.potion.PotionEffectType;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -34,6 +37,8 @@ public class OperatorLoadout {
     private long roundSmokeEndsAtMs; // 0 = 无
 
     private boolean ultimateActiveThisRound;
+    /** 本回合大招施加的药水效果类型（回合结束时按记录清除，而非硬编码清单） */
+    private final Set<PotionEffectType> ultimateEffectTypes = new HashSet<>();
 
     public OperatorLoadout(UUID playerId) {
         this.playerId = playerId;
@@ -319,5 +324,20 @@ public class OperatorLoadout {
 
     public void setUltimateActiveThisRound(boolean ultimateActiveThisRound) {
         this.ultimateActiveThisRound = ultimateActiveThisRound;
+    }
+
+    /** 记录大招施加的效果类型，供回合结束精确清除 */
+    public void recordUltimateEffect(PotionEffectType type) {
+        if (type != null) {
+            ultimateEffectTypes.add(type);
+        }
+    }
+
+    public Set<PotionEffectType> getUltimateEffectTypes() {
+        return ultimateEffectTypes;
+    }
+
+    public void clearUltimateEffectTypes() {
+        ultimateEffectTypes.clear();
     }
 }

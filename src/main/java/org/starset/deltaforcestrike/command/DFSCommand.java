@@ -34,7 +34,7 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             "join", "leave", "team", "agent", "info", "shop", "guide",
             "pause", "techpause", "resume", "restore", "snapshot",
             "setmoney",
-            "observer", "spectator",
+            "observer", "spectator", "player",
             "tournament", "overtime",
             "start", "stop", "give", "reload", "config", "setspawn", "setsite", "help"
     );
@@ -86,6 +86,7 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             case "setmoney" -> setMoney(sender, args);
             case "observer" -> asObserver(sender);
             case "spectator" -> asSpectator(sender);
+            case "player" -> asPlayer(sender);
             case "tournament" -> tournament(sender, args);
             case "overtime" -> overtime(sender);
             case "help" -> help(sender);
@@ -218,6 +219,8 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             return;
         }
         plugin.reloadConfig();
+        // world.arena 可能被改，失效缓存
+        org.starset.deltaforcestrike.util.Worlds.invalidateCache();
         plugin.getItemManager().reload();
         plugin.getGameRulesService().applyToArenaWorld();
         if (plugin.getOperatorService() != null) {
@@ -455,7 +458,8 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         if (args.length >= 3) {
             try {
                 radius = Double.parseDouble(args[2]);
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException e) {
+                p.sendMessage("§c半径不是有效数字: §e" + args[2] + "§7，已使用默认 4.0");
             }
         }
         Location loc = p.getLocation();
@@ -518,9 +522,13 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("§c服务未加载");
             return;
         }
-        plugin.getPauseService().requestTechnical(sender instanceof Player p ? p : null);
-        // console 用法：找一个在线管理员目标? 简化：支持 sender 是 Player；console 提示用法
-        sender.sendMessage("§a已发起技术暂停 §7(/dfs resume 恢复)");
+        boolean ok = plugin.getPauseService()
+                .requestTechnical(sender instanceof Player p ? p : null);
+        if (ok) {
+            sender.sendMessage("§a已发起技术暂停 §7(/dfs resume 恢复)");
+        } else if (sender instanceof Player) {
+            sender.sendMessage("§c技术暂停失败（需在对局购买阶段且当前无暂停）。");
+        }
     }
 
     private void resumeMatch(CommandSender sender) {
@@ -646,6 +654,46 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    /** 观战/导播切回参赛选手：补发起始资金并自动分到人少的队伍 */
+    private void asPlayer(CommandSender sender) {
+        if (!(sender instanceof Player p)) {
+            sender.sendMessage("§c仅玩家可用。");
+            return;
+        }
+        var match = plugin.getMatchManager().getMatch();
+        var session = match == null ? null : match.getSession(p.getUniqueId());
+        if (session == null) {
+            p.sendMessage("§c你不在对局中。§7等待阶段直接 §a/dfs team t §7/ §bct");
+            return;
+        }
+        if (session.isPlaying()) {
+            p.sendMessage("§7你已是参赛选手。");
+            return;
+        }
+        int teamSize = org.starset.deltaforcestrike.config.ConfigKeys.teamSize();
+        long tCount = match.countTeam(Team.T);
+        long ctCount = match.countTeam(Team.CT);
+        Team target = tCount <= ctCount ? Team.T : Team.CT;
+        if (match.countTeam(target) >= teamSize) {
+            p.sendMessage("§c两队都已满员（" + teamSize + "），无法加入。");
+            return;
+        }
+        session.setRole(SpectatorRole.PLAYING);
+        session.setTeam(target);
+        session.setMoney(plugin.getConfig().getInt("economy.start-money", 800));
+        session.setAlive(false);
+        if (plugin.getSpectatorRoleManager() != null) {
+            plugin.getSpectatorRoleManager().setRole(p, SpectatorRole.PLAYING);
+        }
+        p.setGameMode(org.bukkit.GameMode.ADVENTURE);
+        p.sendMessage("§a[DFS] 已转为参赛选手（"
+                + (target == Team.T ? "§cT" : "§bCT") + "§a），下一回合加入战场。");
+        match.broadcast("§a[DFS] §f" + p.getName() + " §7转为参赛选手 → "
+                + (target == Team.T ? "§cT" : "§bCT"));
+        plugin.getScoreboardService().updateAll(match);
+        plugin.getTabListService().updateAll(match);
+    }
+
     private void tournament(CommandSender sender, String[] args) {
         if (!admin(sender)) return;
         if (plugin.getTournamentService() == null) {
@@ -686,7 +734,7 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
         if (!admin(sender)) return;
         Player admin = sender instanceof Player p ? p : null;
         boolean ok = plugin.getMatchManager().enterOvertimeFromEndWindow(admin);
-        if (!ok && admin == null) {
+        if (!ok) {
             sender.sendMessage("§c当前不在平局结算窗口内，无法进入加时。");
         }
     }
@@ -710,7 +758,7 @@ public class DFSCommand implements CommandExecutor, TabCompleter {
                 stream = stream.filter(s -> !List.of(
                         "start", "stop", "reload", "config", "give", "setspawn", "setsite",
                         "techpause", "resume", "restore", "snapshot",
-                        "setmoney", "tournament", "overtime"
+                        "setmoney", "tournament", "overtime", "observer"
                 ).contains(s));
             }
             return filter(stream.collect(Collectors.toList()), args[0]);

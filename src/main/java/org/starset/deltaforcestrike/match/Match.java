@@ -134,20 +134,19 @@ public class Match {
 
     /**
      * 全灭判定：断线玩家仍计入该队，且视为已阵亡（不能阻止回合结束）。
+     * 该队已无任何 session（全员退赛）时同样视为全灭，不阻塞回合结束。
      */
     public boolean allDead(Team team) {
-        boolean any = false;
         for (PlayerSession s : sessions.values()) {
             if (s.getTeam() != team) {
                 continue;
             }
-            any = true;
             // 仅在线且存活才算“还活着”
             if (s.isConnected() && s.isAlive()) {
                 return false;
             }
         }
-        return any;
+        return true;
     }
 
     /** 仍在对局中的在线人数（不含断线占位） */

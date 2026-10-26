@@ -187,17 +187,6 @@ public final class BombDropGlowService implements Listener {
     }
 
     private boolean isPlantBomb(ItemStack stack) {
-        if (stack == null || stack.getType().isAir()) {
-            return false;
-        }
-        if (plugin.getBombManager() != null && plugin.getBombManager().isPlantBomb(stack)) {
-            return true;
-        }
-        String id = plugin.getItemManager().getItemId(stack);
-        String type = plugin.getItemManager().getItemType(stack);
-        if ("bomb".equalsIgnoreCase(type)) {
-            return true;
-        }
-        return id != null && id.toLowerCase().contains("plant-bomb");
+        return plugin.getItemManager().isPlantBomb(stack);
     }
 }

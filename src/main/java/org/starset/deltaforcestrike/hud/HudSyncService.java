@@ -46,19 +46,33 @@ public final class HudSyncService implements PluginMessageListener {
         messenger.unregisterIncomingPluginChannel(plugin, CHANNEL, this);
     }
 
+    /** 客户端拉取节流：同一玩家 500ms 内最多响应一次，防恶意刷包触发全背包扫描 */
+    private static final long REQUEST_THROTTLE_MS = 500;
+    private final java.util.Map<java.util.UUID, Long> lastRequestMs = new java.util.HashMap<>();
+
     @Override
     public void onPluginMessageReceived(String channel, Player player, byte[] message) {
         if (!CHANNEL.equals(channel) || player == null) {
             return;
         }
+        long now = System.currentTimeMillis();
+        Long last = lastRequestMs.get(player.getUniqueId());
+        if (last != null && now - last < REQUEST_THROTTLE_MS) {
+            return;
+        }
+        lastRequestMs.put(player.getUniqueId(), now);
         sendTo(player);
     }
 
     public void tick() {
         Match match = plugin.getMatchManager().getMatch();
         if (match == null) {
+            // 只对竞技世界内的玩家推 inactive 包：
+            // 不向大厅/未装 MOD 的玩家每 0.5s 全服广播
             for (Player p : Bukkit.getOnlinePlayers()) {
-                sendInactive(p);
+                if (org.starset.deltaforcestrike.util.Worlds.isArena(p)) {
+                    sendInactive(p);
+                }
             }
             return;
         }
@@ -116,10 +130,10 @@ public final class HudSyncService implements PluginMessageListener {
 
         int winTarget = match.isOvertime()
                 ? match.overtimeWinTarget()
-                : plugin.getConfig().getInt("match.win-target", 13);
+                : org.starset.deltaforcestrike.config.ConfigKeys.winTarget(false);
         int halfRound = match.isOvertime()
-                ? plugin.getConfig().getInt("overtime.half-round", 3)
-                : plugin.getConfig().getInt("match.half-round", 12);
+                ? org.starset.deltaforcestrike.config.ConfigKeys.halfRound(true)
+                : org.starset.deltaforcestrike.config.ConfigKeys.halfRound(false);
         boolean halfSwapped = match.getRoundManager().isHalfTimeSwapped();
 
         // 下包/拆包：同步 active/类型/已进行tick/总tick；进度客户端本地匀速，用 elapsed 校准起点

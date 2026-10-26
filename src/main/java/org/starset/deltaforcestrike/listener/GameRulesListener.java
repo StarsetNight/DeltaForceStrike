@@ -207,6 +207,8 @@ public class GameRulesListener implements Listener {
             player.setFireTicks(0);
             player.setFallDistance(0f);
             player.setGameMode(GameMode.ADVENTURE);
+            // 复活前清掉残留的负面药水/吸收，避免复活即被凋零等再次打死
+            org.starset.deltaforcestrike.util.PlayerState.clearPotionEffects(player);
             if (self != null) {
                 self.setAlive(true);
                 if (self.hasTeam()) {

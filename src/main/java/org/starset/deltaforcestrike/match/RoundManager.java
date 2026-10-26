@@ -32,6 +32,9 @@ public class RoundManager {
     private static final LegacyComponentSerializer LEGACY =
             LegacyComponentSerializer.legacySection();
 
+    /** 回合胜利方式，决定胜方经济奖励档位（对齐 CS：歼灭 3250 / 爆弹·拆包 3500） */
+    public enum WinType { ELIMINATION, BOMB_DETONATED, BOMB_DEFUSED, TIME_EXPIRED }
+
     private final DeltaForceStrike plugin;
     private final Match match;
     private RoundState state = RoundState.IDLE;
@@ -40,6 +43,12 @@ public class RoundManager {
     private boolean halfTimeSwapped = false;
     /** 本购买阶段是否已播放局势 Title（剩 5 秒时一次） */
     private boolean buySituationTitleShown;
+    /** 回合结算的 8 秒延迟推进任务，必须可取消，否则 forceEnd 后会劫持下一场对局 */
+    private BukkitTask roundEndAdvanceTask;
+    /** 本回合是否已下包（用于败方 +800 奖励判定） */
+    private boolean bombPlantedThisRound = false;
+    /** 回合结算窗口时长：期间展示结果并等待推进到下一回合 */
+    private static final long ROUND_END_ADVANCE_DELAY_TICKS = 8 * 20L;
 
     public RoundManager(DeltaForceStrike plugin, Match match) {
         this.plugin = plugin;
@@ -79,7 +88,11 @@ public class RoundManager {
         }
 
         match.setCurrentRound(match.getCurrentRound() + 1);
+        bombPlantedThisRound = false;
         for (PlayerSession s : match.getSessions().values()) {
+            if (!s.isPlaying()) {
+                continue;
+            }
             // 新回合：在线与断线占位均重置存活，断线者重连后可回购买阶段
             s.setAlive(true);
             s.resetDeathCounted();
@@ -92,17 +105,15 @@ public class RoundManager {
         if (match.isOvertime()) {
             return match.overtimeWinTarget();
         }
-        return plugin.getConfig().getInt("match.win-target", 13);
+        return org.starset.deltaforcestrike.config.ConfigKeys.winTarget(false);
     }
 
     private int maxRounds() {
-        return plugin.getConfig().getInt(match.isOvertime() ? "overtime.max-rounds" : "match.max-rounds",
-                match.isOvertime() ? 6 : 24);
+        return org.starset.deltaforcestrike.config.ConfigKeys.maxRounds(match.isOvertime());
     }
 
     private int halfRound() {
-        return plugin.getConfig().getInt(match.isOvertime() ? "overtime.half-round" : "match.half-round",
-                match.isOvertime() ? 3 : 12);
+        return org.starset.deltaforcestrike.config.ConfigKeys.halfRound(match.isOvertime());
     }
 
     /** 加时赛换边后结算显示用 */
@@ -123,6 +134,10 @@ public class RoundManager {
         secondsLeft = 0;
         halfTimeSwapped = false;
         buySituationTitleShown = false;
+        bombPlantedThisRound = false;
+        if (plugin.getGrenadeService() != null) {
+            plugin.getGrenadeService().cleanupRound();
+        }
     }
 
     private void doHalfTimeSwap(int halfRound) {
@@ -136,6 +151,9 @@ public class RoundManager {
                 : plugin.getConfig().getInt("economy.start-money", 800);
 
         for (PlayerSession s : match.getSessions().values()) {
+            if (!s.isPlaying()) {
+                continue;
+            }
             if (s.getTeam() == Team.T) {
                 s.setTeam(Team.CT);
             } else if (s.getTeam() == Team.CT) {
@@ -165,7 +183,9 @@ public class RoundManager {
 
     private void startBuyPhase() {
         cancel();
-        plugin.getBombManager().reset();
+        if (plugin.getBombManager() != null) {
+            plugin.getBombManager().reset();
+        }
         ArenaCleanup.clearDrops();
 
         state = RoundState.BUY;
@@ -181,7 +201,7 @@ public class RoundManager {
 
         for (Player p : match.onlinePlayers()) {
             PlayerSession s = match.getSession(p.getUniqueId());
-            if (s == null || !s.hasTeam()) {
+            if (s == null || !s.isPlaying() || !s.hasTeam()) {
                 continue;
             }
 
@@ -193,6 +213,9 @@ public class RoundManager {
 
             p.setInvulnerable(false);
             p.setFallDistance(0f);
+            // 清掉上一回合残留的凋零/中毒/缓慢等负面效果与火焰
+            PlayerState.clearPotionEffects(p);
+            p.setFireTicks(0);
             plugin.getGameRulesService().fillHealth(p);
             plugin.getGameRulesService().fillFood(p);
             plugin.getMatchManager().teleportTeamSpawn(p, s.getTeam());
@@ -237,7 +260,7 @@ public class RoundManager {
             }
             for (Player p : match.onlinePlayers()) {
                 PlayerSession s = match.getSession(p.getUniqueId());
-                if (s == null || !s.hasTeam()) {
+                if (s == null || !s.isPlaying() || !s.hasTeam()) {
                     continue;
                 }
                 s.setAlive(true);
@@ -258,7 +281,7 @@ public class RoundManager {
             }
             for (Player p : match.onlinePlayers()) {
                 PlayerSession s = match.getSession(p.getUniqueId());
-                if (s != null && s.hasTeam() && s.isAlive()) {
+                if (s != null && s.isPlaying() && s.hasTeam() && s.isAlive()) {
                     forceExitSpectator(p);
                     ShopGUI.open(p);
                 }
@@ -333,28 +356,37 @@ public class RoundManager {
         state = RoundState.BUY;
         secondsLeft = Math.max(1, snap.buySeconds);
         buySituationTitleShown = false;
+        bombPlantedThisRound = false;
 
-        for (Player p : match.onlinePlayers()) {
-            PlayerSession s = match.getSession(p.getUniqueId());
-            if (s == null) continue;
-
-            // 观战/导播：跳过还原，重新进入旁观
+        // 以 session 为主体遍历：离线玩家的金钱/连败/击杀同样要回滚，
+        // 否则重连后与场上玩家经济分叉
+        for (PlayerSession s : match.getSessions().values()) {
             if (!s.isPlaying()) {
-                if (plugin.getSpectatorRoleManager() != null) {
-                    plugin.getSpectatorRoleManager().applyRole(p);
+                Player sp = Bukkit.getPlayer(s.getUuid());
+                if (sp != null && plugin.getSpectatorRoleManager() != null) {
+                    plugin.getSpectatorRoleManager().applyRole(sp);
                 }
                 continue;
             }
 
-            // 还原 session 状态
-            var snap_entry = snap.players.get(p.getUniqueId());
-            if (snap_entry == null) continue;
-            s.setMoney(snap_entry.money);
-            s.setConsecutiveLosses(snap_entry.consecutiveLosses);
-            s.setAlive(snap_entry.alive);
+            var entry = snap.players.get(s.getUuid());
+            if (entry == null) continue;
+            s.setMoney(entry.money);
+            s.setConsecutiveLosses(entry.consecutiveLosses);
+            s.setAlive(entry.alive);
+            s.setOperatorId(entry.operatorId);
+            s.setDeathCounted(entry.deathCounted);
+            s.setKills(entry.kills);
+            s.setDeaths(entry.deaths);
+
+            Player p = Bukkit.getPlayer(s.getUuid());
+            if (p == null) {
+                // 离线玩家：session 数据已还原，库存留待重连时恢复；
+                // connected 保持当前 false，开战时会被统一判死，不阻塞回合结束
+                plugin.getSnapshotService().stashPendingRestore(s.getUuid(), entry);
+                continue;
+            }
             s.setConnected(true);
-            s.setOperatorId(snap_entry.operatorId);
-            s.setDeathCounted(snap_entry.deathCounted);
 
             forceExitSpectator(p);
             p.setInvulnerable(false);
@@ -369,26 +401,26 @@ public class RoundManager {
                 }
             } catch (Throwable ignored) {
             }
-            double hp = snap_entry.health;
+            double hp = entry.health;
             if (Double.isNaN(hp) || hp < 0) {
                 hp = 0;
             } else if (hp > maxHp) {
                 hp = maxHp;
             }
             p.setHealth(hp);
-            p.setFoodLevel(snap_entry.food);
-            try { p.setSaturation(snap_entry.saturation); } catch (Throwable ignored) {}
+            p.setFoodLevel(entry.food);
+            try { p.setSaturation(entry.saturation); } catch (Throwable ignored) {}
             for (var pe : p.getActivePotionEffects()) p.removePotionEffect(pe.getType());
-            if (snap_entry.potionEffects != null) {
-                for (var e : snap_entry.potionEffects) p.addPotionEffect(e);
+            if (entry.potionEffects != null) {
+                for (var e : entry.potionEffects) p.addPotionEffect(e);
             }
-            p.getInventory().setContents(snap_entry.contents);
-            p.getInventory().setArmorContents(snap_entry.armor);
-            p.getInventory().setItemInOffHand(snap_entry.offHand);
-            try { p.getInventory().setHeldItemSlot(snap_entry.heldSlot); } catch (Throwable ignored) {}
+            p.getInventory().setContents(entry.contents);
+            p.getInventory().setArmorContents(entry.armor);
+            p.getInventory().setItemInOffHand(entry.offHand);
+            try { p.getInventory().setHeldItemSlot(entry.heldSlot); } catch (Throwable ignored) {}
 
-            if (snap_entry.world != null
-                    && snap_entry.world.equalsIgnoreCase(
+            if (entry.world != null
+                    && entry.world.equalsIgnoreCase(
                             p.getWorld() == null ? "" : p.getWorld().getName())) {
                 Location spawn = s.hasTeam()
                         ? ConfigKeys.readLocation(s.getTeam() == Team.T
@@ -572,7 +604,7 @@ public class RoundManager {
         List<Player> tPlayers = new ArrayList<>();
         for (Player p : match.onlinePlayers()) {
             PlayerSession s = match.getSession(p.getUniqueId());
-            if (s == null || s.getTeam() != Team.T || !s.isConnected()) {
+            if (s == null || !s.isPlaying() || s.getTeam() != Team.T || !s.isConnected()) {
                 continue;
             }
             tPlayers.add(p);
@@ -606,37 +638,14 @@ public class RoundManager {
     }
 
     private boolean isPlantBombItem(ItemManager items, ItemStack stack) {
-        if (stack == null) {
-            return false;
-        }
-        String action = null;
-        if (stack.hasItemMeta()) {
-            action = stack.getItemMeta().getPersistentDataContainer().get(
-                    ItemKeys.action(),
-                    org.bukkit.persistence.PersistentDataType.STRING);
-        }
-        if ("defuse".equalsIgnoreCase(action)) {
-            return false;
-        }
-        String type = items.getItemType(stack);
-        if ("defuse".equalsIgnoreCase(type)) {
-            return false;
-        }
-        String id = items.getItemId(stack);
-        if (id != null && id.toLowerCase(Locale.ROOT).contains("defuse")) {
-            return false;
-        }
-        if ("bomb".equalsIgnoreCase(type) || "plant".equalsIgnoreCase(action)) {
-            return true;
-        }
-        return id != null && id.contains("plant-bomb");
+        return items.isPlantBomb(stack);
     }
 
     private void startCombatPhase() {
         cancel();
         // 购买阶段仍断线的玩家：本回合视为阵亡（不占“存活”坑）
         for (PlayerSession s : match.getSessions().values()) {
-            if (!s.isConnected() && s.isAlive()) {
+            if (!s.isConnected() && s.isAlive() && s.isPlaying()) {
                 if (s.markDeathCounted()) {
                     s.addDeath();
                 }
@@ -663,7 +672,7 @@ public class RoundManager {
             }
             actionBarLegacy("§c进攻时间 §f" + formatTime(secondsLeft));
             if (secondsLeft <= 0) {
-                endRound(Team.CT, "进攻超时，防守方胜利");
+                endRound(Team.CT, "进攻超时，防守方胜利", WinType.TIME_EXPIRED);
                 return;
             }
             refreshUi();
@@ -677,12 +686,13 @@ public class RoundManager {
         }
         cancel();
         state = RoundState.BOMB_PLANTED;
+        bombPlantedThisRound = true;
         secondsLeft = plugin.getBombManager().getFuseLeft();
         broadcastLegacy("§c[DFS] 拆弹阶段！§7CT 潜行靠近拆除（钳在第3格更快）");
         refreshUi();
 
         if (match.allDead(Team.CT)) {
-            endRound(Team.T, "防守方全灭");
+            endRound(Team.T, "防守方全灭", WinType.ELIMINATION);
             return;
         }
 
@@ -705,30 +715,35 @@ public class RoundManager {
             return;
         }
         if (match.allDead(Team.CT)) {
-            endRound(Team.T, "防守方全灭");
+            endRound(Team.T, "防守方全灭", WinType.ELIMINATION);
             return;
         }
         if (state == RoundState.COMBAT && match.allDead(Team.T)) {
-            endRound(Team.CT, "进攻方全灭");
+            endRound(Team.CT, "进攻方全灭", WinType.ELIMINATION);
         }
     }
 
-    public void endRound(Team winner, String reason) {
+    public void endRound(Team winner, String reason, WinType winType) {
         if (state == RoundState.ROUND_END || state == RoundState.IDLE) {
             return;
         }
         cancel();
         state = RoundState.ROUND_END;
 
-        plugin.getBombManager().reset();
+        if (plugin.getBombManager() != null) {
+            plugin.getBombManager().reset();
+        }
         ArenaCleanup.clearDrops();
-
+        // 回合边界回收持续效果（烟雾/凋零/召唤物等）
+        if (plugin.getGrenadeService() != null) {
+            plugin.getGrenadeService().cleanupRound();
+        }
         if (plugin.getOperatorService() != null) {
             plugin.getOperatorService().onRoundEnd(match);
         }
 
         match.addScore(winner);
-        applyEconomy(winner);
+        applyEconomy(winner, winType);
 
         broadcastLegacy("§6[DFS] 回合结束: §f" + (reason == null ? "" : reason));
         broadcastLegacy("§7比分 §cT " + match.getScoreT() + " §7- §b" + match.getScoreCT() + " CT");
@@ -736,10 +751,18 @@ public class RoundManager {
         showRoundResultTitles(winner, reason);
         refreshUi();
 
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        // 持有句柄以便 shutdown/reset 时取消，防止结算窗口内强制结束
+        // 后旧任务触发 startNextRound 劫持下一场对局
+        roundEndAdvanceTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            roundEndAdvanceTask = null;
             ArenaCleanup.clearDrops();
             startNextRound();
-        }, 8 * 20L);
+        }, ROUND_END_ADVANCE_DELAY_TICKS);
+    }
+
+    /** 兼容旧调用：默认按歼灭结算 */
+    public void endRound(Team winner, String reason) {
+        endRound(winner, reason, WinType.ELIMINATION);
     }
 
     private void showRoundResultTitles(Team winner, String reason) {
@@ -772,12 +795,22 @@ public class RoundManager {
         }
     }
 
-    private void applyEconomy(Team winner) {
-        int winMoney = plugin.getConfig().getInt("economy.victory-bonus", 3200);
+    private void applyEconomy(Team winner, WinType winType) {
+        // 对齐 CS：歼灭/超时 3250，爆弹/拆包 3500；victory-bonus 为未配置新键时的兜底
+        int defaultWin = plugin.getConfig().getInt("economy.victory-bonus", 3200);
+        int winMoney = switch (winType == null ? WinType.ELIMINATION : winType) {
+            case BOMB_DETONATED, BOMB_DEFUSED ->
+                    plugin.getConfig().getInt("economy.win-reward-bomb", defaultWin);
+            case ELIMINATION, TIME_EXPIRED ->
+                    plugin.getConfig().getInt("economy.win-reward-elimination", defaultWin);
+        };
+        int plantedBonus = plugin.getConfig().getInt("economy.lose-reward-planted-bonus", 800);
         List<Integer> defeat = plugin.getConfig().getIntegerList("economy.defeat-bonus");
         if (defeat.isEmpty()) {
             defeat = List.of(2000, 2550, 3100);
         }
+        // 手枪局只认正赛第 1 回合：加时赛从 round 0 重新计数，不能再吃手枪局补偿
+        boolean pistolRound = match.getCurrentRound() == 1 && !match.isOvertime();
         int pistol = plugin.getConfig().getInt("economy.pistol-round-bonus", 2550);
 
         for (PlayerSession s : match.getSessions().values()) {
@@ -790,10 +823,14 @@ public class RoundManager {
             } else {
                 int losses = s.getConsecutiveLosses() + 1;
                 s.setConsecutiveLosses(losses);
-                if (match.getCurrentRound() == 1) {
+                if (pistolRound) {
                     s.addMoney(pistol);
                 } else {
                     s.addMoney(defeat.get(Math.min(losses - 1, defeat.size() - 1)));
+                }
+                // T 已下包但输掉回合：整队额外 +800（CS 规则）
+                if (bombPlantedThisRound && s.getTeam() == Team.T) {
+                    s.addMoney(plantedBonus);
                 }
             }
         }
@@ -802,7 +839,9 @@ public class RoundManager {
     private void endMatchByScore() {
         cancel();
         state = RoundState.IDLE;
-        plugin.getBombManager().reset();
+        if (plugin.getBombManager() != null) {
+            plugin.getBombManager().reset();
+        }
         ArenaCleanup.clearDrops();
         String msg;
         if (match.getScoreT() > match.getScoreCT()) {
@@ -838,27 +877,48 @@ public class RoundManager {
     }
 
     private void refreshUi() {
-        if (plugin.getScoreboardService() != null) {
-            plugin.getScoreboardService().updateAll(match);
+        try {
+            if (plugin.getScoreboardService() != null) {
+                plugin.getScoreboardService().updateAll(match);
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().warning("Scoreboard updateAll: " + t.getMessage());
         }
-        if (plugin.getTabListService() != null) {
-            plugin.getTabListService().updateAll(match);
+        try {
+            if (plugin.getTabListService() != null) {
+                plugin.getTabListService().updateAll(match);
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().warning("Tab updateAll: " + t.getMessage());
         }
-        if (plugin.getHudSyncService() != null) {
-            plugin.getHudSyncService().tick();
+        try {
+            if (plugin.getHudSyncService() != null) {
+                plugin.getHudSyncService().tick();
+            }
+        } catch (Throwable t) {
+            plugin.getLogger().warning("HudSync tick: " + t.getMessage());
         }
     }
 
     public void shutdown() {
         cancel();
         state = RoundState.IDLE;
-        plugin.getBombManager().reset();
+        if (plugin.getBombManager() != null) {
+            plugin.getBombManager().reset();
+        }
+        if (plugin.getGrenadeService() != null) {
+            plugin.getGrenadeService().cleanupRound();
+        }
     }
 
     private void cancel() {
         if (task != null) {
             task.cancel();
             task = null;
+        }
+        if (roundEndAdvanceTask != null) {
+            roundEndAdvanceTask.cancel();
+            roundEndAdvanceTask = null;
         }
     }
 }

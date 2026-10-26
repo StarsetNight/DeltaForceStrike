@@ -67,6 +67,30 @@ public class InventoryLockListener implements Listener {
     // 点击
     // =====================================================================
 
+    /**
+     * 对局中禁止打开箱子/铁砧/砂轮/工作台等一切容器 GUI：
+     * 否则装备可藏箱换装、铁砧可合并自定义武器、砂轮可洗附魔。
+     * 仅放行本插件自己的 GUI（商店/选边/干员选择）。
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onOpen(org.bukkit.event.inventory.InventoryOpenEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) {
+            return;
+        }
+        if (!shouldLock(player)) {
+            return;
+        }
+        Inventory top = event.getInventory();
+        Object holder = top == null ? null : top.getHolder();
+        if (holder instanceof org.starset.deltaforcestrike.shop.ShopHolder
+                || holder instanceof org.starset.deltaforcestrike.match.TeamSelectHolder
+                || holder instanceof org.starset.deltaforcestrike.operator.OperatorSelectHolder) {
+            return;
+        }
+        event.setCancelled(true);
+        deny(player, "对局中不能打开容器界面。");
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) {
@@ -94,6 +118,13 @@ public class InventoryLockListener implements Listener {
 
         boolean clickOnPlayerInv = clicked != null && clicked.equals(bottom);
 
+        // 顶部背包（含本插件 GUI 之外的任何容器视图）一律禁止操作：
+        // 自家 GUI 由各自 listener 取消并处理，这里兜底拦截数字键换入容器等路径
+        if (clicked != null && !clickOnPlayerInv) {
+            event.setCancelled(true);
+            return;
+        }
+
         if (clickOnPlayerInv) {
             int slot = event.getSlot();
 
@@ -106,6 +137,11 @@ public class InventoryLockListener implements Listener {
                         forceShieldOffhandNextTick(player);
                         return;
                     }
+                } else if (!isEmpty(current) || !isEmpty(cursor)) {
+                    // 盾系统禁用时副手同样上锁，防止武器挂副手双持
+                    event.setCancelled(true);
+                    deny(player, "副手已禁用。");
+                    return;
                 }
             }
 
@@ -154,6 +190,12 @@ public class InventoryLockListener implements Listener {
                         forceShieldOffhandNextTick(player);
                         return;
                     }
+                    // 箭只允许 3-5 槽（与 canPlaceInHotbar 对齐，防占炸弹槽）
+                    if (isAllowedVanilla(cursor) && (slot < 3 || slot > 5)) {
+                        event.setCancelled(true);
+                        deny(player, "箭矢只能放在 4-6 道具槽。");
+                        return;
+                    }
                     if (isCustomItem(items, cursor) && !canPlaceInHotbar(items, cursor, slot)) {
                         event.setCancelled(true);
                         deny(player, "该物品不能放在此槽位。");
@@ -173,6 +215,12 @@ public class InventoryLockListener implements Listener {
                 if (event.isShiftClick() && isCustomItem(items, current) && !isAllowedVanilla(current)) {
                     event.setCancelled(true);
                     deny(player, "自定义物品不能移入背包。");
+                    return;
+                }
+                // Shift 移动箭矢会随机落进任意热键槽，统一禁止手动放
+                if (event.isShiftClick() && isAllowedVanilla(current)) {
+                    event.setCancelled(true);
+                    deny(player, "请手动将箭矢放到 4-6 道具槽。");
                     return;
                 }
                 if (event.isShiftClick() && (InventorySlots.isLockedSkillSlot(slot)
@@ -220,7 +268,14 @@ public class InventoryLockListener implements Listener {
             return true;
         }
 
-        if (clicked == null || !clicked.equals(bottom)) {
+        // 数字键对顶部背包（箱子/铁砧等）：把热键武器换进容器是主要绕过路径之一
+        if (clicked != null && !clicked.equals(bottom)) {
+            event.setCancelled(true);
+            deny(player, "对局中不能操作容器界面。");
+            return true;
+        }
+
+        if (clicked == null) {
             return false;
         }
 
@@ -230,6 +285,17 @@ public class InventoryLockListener implements Listener {
             event.setCancelled(true);
             deny(player, "技能槽不可用数字键交换。");
             return true;
+        }
+
+        if (slot == 40 && !ConfigKeys.shieldEnabled()) {
+            // 盾禁用时副手也上锁
+            ItemStack hotbarItem = playerInv.getItem(hotbarButton);
+            ItemStack off = playerInv.getItemInOffHand();
+            if (!isEmpty(off) || !isEmpty(hotbarItem)) {
+                event.setCancelled(true);
+                deny(player, "副手已禁用。");
+                return true;
+            }
         }
 
         if (ConfigKeys.shieldEnabled() && slot == 40) {
@@ -268,6 +334,17 @@ public class InventoryLockListener implements Listener {
                 event.setCancelled(true);
                 deny(player, "盾牌只能在副手。");
                 forceShieldOffhandNextTick(player);
+                return true;
+            }
+            // 箭只允许放 3-5 道具槽（与 canPlaceInHotbar 一致）
+            if (isAllowedVanilla(movingToHotbar) && (hotbarButton < 3 || hotbarButton > 5)) {
+                event.setCancelled(true);
+                deny(player, "箭矢只能放在 4-6 道具槽。");
+                return true;
+            }
+            if (isAllowedVanilla(movingToSlot) && (slot < 3 || slot > 5)) {
+                event.setCancelled(true);
+                deny(player, "箭矢不能放在此槽位。");
                 return true;
             }
             if (isCustomItem(items, movingToHotbar) && !canPlaceInHotbar(items, movingToHotbar, hotbarButton)) {
@@ -343,11 +420,21 @@ public class InventoryLockListener implements Listener {
                     deny(player, "副手只能放盾牌。");
                     return;
                 }
+            } else if (invSlot == 40 && !isEmpty(old)) {
+                // 盾禁用时副手上锁
+                event.setCancelled(true);
+                deny(player, "副手已禁用。");
+                return;
             }
             if (InventorySlots.isHotbar(invSlot)) {
                 if (ConfigKeys.shieldEnabled() && isShield(items, old)) {
                     event.setCancelled(true);
                     deny(player, "盾牌只能放在副手。");
+                    return;
+                }
+                if (isAllowedVanilla(old) && (invSlot < 3 || invSlot > 5)) {
+                    event.setCancelled(true);
+                    deny(player, "箭矢只能放在 4-6 道具槽。");
                     return;
                 }
                 if (isCustomItem(items, old) && !canPlaceInHotbar(items, old, invSlot)) {
@@ -377,6 +464,13 @@ public class InventoryLockListener implements Listener {
         }
 
         if (!ConfigKeys.shieldEnabled()) {
+            // 盾禁用时：副手不上锁等于武器可挂副手双持，禁止携带自定义物品的 F 交换
+            ItemManager items = plugin.getItemManager();
+            ItemStack mainBefore = event.getMainHandItem();
+            if (isCustomItem(items, mainBefore) && !isAllowedVanilla(mainBefore)) {
+                event.setCancelled(true);
+                deny(player, "副手已禁用，无法交换。");
+            }
             return;
         }
 
@@ -586,8 +680,16 @@ public class InventoryLockListener implements Listener {
 
         if (!ConfigKeys.shieldEnabled()) {
             ItemStack off = inv.getItemInOffHand();
-            if (looksLikeShield(items, off)) {
-                inv.setItemInOffHand(null);
+            if (!isEmpty(off)) {
+                if (looksLikeShield(items, off)) {
+                    inv.setItemInOffHand(null);
+                } else if (isCustomItem(items, off)) {
+                    // 自定义武器/道具不得滞留副手（盾禁用配置下副手全锁）
+                    inv.setItemInOffHand(null);
+                    relocateOrDrop(player, items, off);
+                } else {
+                    inv.setItemInOffHand(null);
+                }
             }
             for (int i = 0; i <= 35; i++) {
                 ItemStack stack = inv.getItem(i);
@@ -675,6 +777,17 @@ public class InventoryLockListener implements Listener {
         for (int i = 0; i <= 8; i++) {
             ItemStack stack = inv.getItem(i);
             if (isAllowedVanilla(stack)) {
+                // 箭只允许 3-5 道具槽；落在其它热键槽的箭移回 3-5，放不下则删除
+                if (i >= 3 && i <= 5) {
+                    continue;
+                }
+                inv.setItem(i, null);
+                for (int k = 3; k <= 5; k++) {
+                    if (isEmpty(inv.getItem(k))) {
+                        inv.setItem(k, stack);
+                        break;
+                    }
+                }
                 continue;
             }
             if (!isCustomItem(items, stack) || isShield(items, stack)) {
@@ -805,25 +918,8 @@ public class InventoryLockListener implements Listener {
     }
 
     private boolean isPlantBombOnly(ItemManager items, ItemStack stack) {
-        if (stack == null) {
-            return false;
-        }
-        String action = getAction(stack);
-        if ("defuse".equalsIgnoreCase(action)) {
-            return false;
-        }
-        String type = items.getItemType(stack);
-        if ("defuse".equalsIgnoreCase(type)) {
-            return false;
-        }
-        String id = items.getItemId(stack);
-        if (id != null && id.toLowerCase(Locale.ROOT).contains("defuse")) {
-            return false;
-        }
-        if ("bomb".equalsIgnoreCase(type) || "plant".equalsIgnoreCase(action)) {
-            return true;
-        }
-        return id != null && id.contains("plant-bomb");
+        // 统一判定委托给 ItemManager
+        return items.isPlantBomb(stack);
     }
 
     private void relocateOrDrop(Player player, ItemManager items, ItemStack stack) {

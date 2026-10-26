@@ -12,6 +12,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.starset.deltaforcestrike.DeltaForceStrike;
 import org.starset.deltaforcestrike.item.ItemKeys;
 import org.starset.deltaforcestrike.item.InventorySlots;
@@ -25,6 +26,8 @@ import org.starset.deltaforcestrike.operator.skill.SkillHandlerRegistry;
 import org.starset.deltaforcestrike.operator.skill.SkillResult;
 import org.starset.deltaforcestrike.operator.skill.impl.EmergencyBeaconHandler;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -44,6 +47,8 @@ public class OperatorService {
     private final SkillHandlerRegistry handlers;
     private final Map<UUID, OperatorLoadout> loadouts = new ConcurrentHashMap<>();
     private final Map<UUID, Long> skillClickCooldownUntil = new ConcurrentHashMap<>();
+    /** 技能产生的持续效果任务（滞留迟缓等），回合结束时统一取消 */
+    private final List<BukkitRunnable> activeEffectTasks = new ArrayList<>();
 
     public OperatorService(DeltaForceStrike plugin) {
         this.plugin = plugin;
@@ -70,6 +75,8 @@ public class OperatorService {
 
     public void clearPlayer(UUID uuid) {
         loadouts.remove(uuid);
+        // 同步清理点击防抖记录，避免 Map 随生命周期无限增长
+        skillClickCooldownUntil.remove(uuid);
     }
 
     // =====================================================================
@@ -150,6 +157,13 @@ public class OperatorService {
                 }
             });
             plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                // 延迟写槽前复查对局/回合状态：2 tick 内回合可能已被终结，
+                // 不能把技能物品写进结算阶段的背包
+                Match m = plugin.getMatchManager().getMatch();
+                if (m == null || m.getState() != MatchState.IN_PROGRESS
+                        || m.getRoundManager().getState() != RoundState.BUY) {
+                    return;
+                }
                 if (fp.isOnline()) {
                     fl.refreshSignatureChargesFull();
                     writeSignatureSlot(fp, fl);
@@ -164,6 +178,10 @@ public class OperatorService {
         if (match == null) {
             return;
         }
+        // 回合边界：清掉召唤物与技能持续效果任务，
+        // 防止其活进下一回合攻击/影响玩家
+        cleanupSummonedEntities();
+        cleanupEffectTasks();
         int perRound = registry.getUltimatePointsPerRound();
         int ultCap = registry.getUltimatePointsMax();
 
@@ -283,7 +301,7 @@ public class OperatorService {
         p.updateInventory();
     }
 
-    /** 强制写入槽位；若被占用且不是技能则掉落占用物 */
+    /** 强制写入槽位；若被占用且不是技能则静默删除（掉落会成为物品复制出口） */
     private void forceSetSlot(Player p, int slot, ItemStack item) {
         if (item == null) {
             p.getInventory().setItem(slot, null);
@@ -291,8 +309,8 @@ public class OperatorService {
         }
         ItemStack old = p.getInventory().getItem(slot);
         if (old != null && !old.getType().isAir() && !isSkillStack(old)) {
-            // 非技能占格：掉地上（不应发生）
-            p.getWorld().dropItemNaturally(p.getLocation(), old);
+            // 非技能占格：不应发生；直接删除，绝不落地
+            p.getInventory().setItem(slot, null);
         }
         p.getInventory().setItem(slot, item);
     }
@@ -735,6 +753,10 @@ public class OperatorService {
         }
 
         boolean inProgress = match.getState() == MatchState.IN_PROGRESS;
+        // 技能烟幕只在战斗/拆弹阶段渲染，避免粒子跨过回合结束残留
+        RoundState rs = match.getRoundManager().getState();
+        boolean smokePhase = inProgress
+                && (rs == RoundState.COMBAT || rs == RoundState.BOMB_PLANTED);
 
         // 强效烟幕：按 loadout 到期时间刷粒子（与在线玩家循环解耦，避免误停）
         for (OperatorLoadout smokeLoad : loadouts.values()) {
@@ -742,7 +764,7 @@ public class OperatorService {
                 continue;
             }
             smokeLoad.tickSmokeExpiry();
-            if (inProgress
+            if (smokePhase
                     && smokeLoad.isRoundSmokeActive()
                     && smokeLoad.getRoundSmokeCenter() != null) {
                 double r = smokeLoad.getRoundSmokeRadius() > 0
@@ -762,7 +784,11 @@ public class OperatorService {
                 notifySignatureReady(p, load);
             }
 
-            applyPassive(p, load);
+            // 仅存活玩家维持被动；阵亡/旁观者不再挂被动药水
+            PlayerSession ps = match.getSession(p.getUniqueId());
+            if (ps == null || ps.isAlive()) {
+                applyPassive(p, load);
+            }
 
             if (p.getTicksLived() % 20 == 0) {
                 ensureSkillSlotsPresent(p, load);
@@ -941,14 +967,27 @@ public class OperatorService {
     }
 
     /**
-     * 清除大招带来的临时增益（妮可狂暴等）。
-     * 随后 onRoundStart 会 applyPassive 续上被动。
+     * 清除大招带来的临时增益（按 loadout 记录的效果类型精确清除，
+     * 另保留常见增益作兜底）。随后 onRoundStart 会 applyPassive 续上被动。
      */
     public void clearUltimateBuffs(Player p) {
+        clearUltimateBuffs(p, getLoadout(p == null ? null : p.getUniqueId()));
+    }
+
+    public void clearUltimateBuffs(Player p, OperatorLoadout load) {
         if (p == null || !p.isOnline()) {
             return;
         }
-        // 大招常见增益：力量/抗性/跳跃/速度(狂暴II)
+        if (load != null) {
+            for (PotionEffectType type : load.getUltimateEffectTypes()) {
+                try {
+                    p.removePotionEffect(type);
+                } catch (Throwable ignored) {
+                }
+            }
+            load.clearUltimateEffectTypes();
+        }
+        // 兜底：大招常见增益
         p.removePotionEffect(PotionEffectType.STRENGTH);
         p.removePotionEffect(PotionEffectType.RESISTANCE);
         p.removePotionEffect(PotionEffectType.SPEED);
@@ -956,5 +995,46 @@ public class OperatorService {
             p.removePotionEffect(PotionEffectType.JUMP_BOOST);
         } catch (Throwable ignored) {
         }
+    }
+
+    /**
+     * 清除全部带召唤标记的实体（恼鬼等），防止跨回合/跨对局残留
+     * 并攻击下一回合购买阶段的玩家。
+     */
+    public void cleanupSummonedEntities() {
+        for (org.bukkit.World w : plugin.getServer().getWorlds()) {
+            if (!org.starset.deltaforcestrike.util.Worlds.isArena(w)) {
+                continue;
+            }
+            for (org.bukkit.entity.Entity e : w.getEntities()) {
+                if (e != null && e.isValid()
+                        && e.getPersistentDataContainer()
+                                .has(OperatorKeys.SUMMON_MARKER, PersistentDataType.BYTE)) {
+                    e.remove();
+                }
+            }
+        }
+    }
+
+    /** 登记技能持续效果任务，供回合边界统一取消 */
+    public void trackEffectTask(BukkitRunnable task) {
+        if (task != null) {
+            activeEffectTasks.add(task);
+        }
+    }
+
+    public void untrackEffectTask(BukkitRunnable task) {
+        activeEffectTasks.remove(task);
+    }
+
+    /** 取消全部技能持续效果任务（滞留迟缓等的粒子/效果不再跨回合） */
+    public void cleanupEffectTasks() {
+        for (BukkitRunnable t : activeEffectTasks) {
+            try {
+                t.cancel();
+            } catch (Throwable ignored) {
+            }
+        }
+        activeEffectTasks.clear();
     }
 }

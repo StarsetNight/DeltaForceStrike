@@ -30,6 +30,8 @@ public final class SnapshotService {
 
     private final DeltaForceStrike plugin;
     private RoundSnapshot snapshot;
+    /** 回滚时离线玩家的库存快照，重连购买阶段时恢复 */
+    private final Map<UUID, PlayerEntry> pendingRestores = new LinkedHashMap<>();
 
     public SnapshotService(DeltaForceStrike plugin) {
         this.plugin = plugin;
@@ -40,6 +42,7 @@ public final class SnapshotService {
         Match match = plugin.getMatchManager().getMatch();
         if (match == null || match.getState() != MatchState.IN_PROGRESS) return;
         if (match.getRoundManager().getState() != RoundState.BUY) return;
+        pendingRestores.clear();
         snapshot = capture(match);
         if (plugin.getConfig().getBoolean("debug.enabled", false)) {
             plugin.getLogger().info("[Snapshot] 已拍摄 R" + match.getCurrentRound()
@@ -57,6 +60,7 @@ public final class SnapshotService {
 
     public void clear() {
         snapshot = null;
+        pendingRestores.clear();
     }
 
     public RoundSnapshot capture(Match match) {
@@ -65,7 +69,8 @@ public final class SnapshotService {
         snap.scoreT = match.getScoreT();
         snap.scoreCT = match.getScoreCT();
         snap.halfSwapped = match.getRoundManager().isHalfTimeSwapped();
-        snap.buySeconds = plugin.getConfig().getInt("round.prepare-time", 20);
+        // 记录实际剩余购买秒数，回滚后沿用（而非总是满额重置）
+        snap.buySeconds = Math.max(1, match.getRoundManager().getSecondsLeft());
 
         for (PlayerSession s : match.getSessions().values()) {
             if (!s.isPlaying()) continue;
@@ -85,20 +90,14 @@ public final class SnapshotService {
             e.deaths = s.getDeaths();
 
             e.health = p.getHealth();
-            try {
-                var attr = p.getAttribute(org.bukkit.attribute.Attribute.MAX_HEALTH);
-                e.maxHealth = attr != null ? attr.getValue() : 20.0;
-            } catch (Throwable t) {
-                e.maxHealth = 20.0;
-            }
             e.food = p.getFoodLevel();
             e.saturation = p.getSaturation();
-            e.gamemode = p.getGameMode();
             e.potionEffects = p.getActivePotionEffects().toArray(new PotionEffect[0]);
 
             PlayerInventory inv = p.getInventory();
-            e.contents = inv.getContents().clone();
-            e.armor = inv.getArmorContents().clone();
+            // 逐元素克隆：getContents() 返回的是活镜像，只克隆数组挡不住原槽位的原地修改
+            e.contents = deepCopy(inv.getContents());
+            e.armor = deepCopy(inv.getArmorContents());
             e.offHand = inv.getItemInOffHand().clone();
             e.heldSlot = inv.getHeldItemSlot();
 
@@ -110,13 +109,17 @@ public final class SnapshotService {
             e.yaw = l.getYaw();
             e.pitch = l.getPitch();
 
-            e.invulnerable = p.isInvulnerable();
-            e.flying = p.isFlying();
-            e.allowFlight = p.getAllowFlight();
-
             snap.players.put(e.uuid, e);
         }
         return snap;
+    }
+
+    private static ItemStack[] deepCopy(ItemStack[] src) {
+        ItemStack[] out = new ItemStack[src.length];
+        for (int i = 0; i < src.length; i++) {
+            out[i] = src[i] == null ? null : src[i].clone();
+        }
+        return out;
     }
 
     /** 管理员命令：回滚到本回合购买阶段快照。admin 可为 null（console 调用） */
@@ -130,8 +133,14 @@ public final class SnapshotService {
             if (admin != null) admin.sendMessage("§c[DFS] 没有本回合的购买阶段快照。");
             return false;
         }
-        if (match.getRoundManager().getState() == RoundState.BOMB_PLANTED) {
-            if (admin != null) admin.sendMessage("§c[DFS] 拆弹阶段不能回滚。");
+        // 只允许在购买阶段回滚，且快照必须是本回合的，
+        // 否则结算窗口内回滚会把比分/金钱与已记账的回合错位
+        if (match.getRoundManager().getState() != RoundState.BUY) {
+            if (admin != null) admin.sendMessage("§c[DFS] 只能在购买阶段回滚。");
+            return false;
+        }
+        if (snapshot.round != match.getCurrentRound()) {
+            if (admin != null) admin.sendMessage("§c[DFS] 快照不是本回合的，无法回滚。");
             return false;
         }
         match.broadcast("§6[DFS] §e管理员回滚回合到购买阶段快照 §7(R" + snapshot.round + ")");
@@ -139,9 +148,37 @@ public final class SnapshotService {
         return true;
     }
 
+    /** 回滚时离线玩家的库存快照入队，重连购买阶段时恢复 */
+    public void stashPendingRestore(UUID uuid, PlayerEntry entry) {
+        if (uuid != null && entry != null && entry.contents != null) {
+            pendingRestores.put(uuid, entry);
+        }
+    }
+
+    /** 重连归队（购买阶段）时恢复回滚前快照的库存 */
+    public void applyPendingRestore(Player p) {
+        if (p == null) return;
+        PlayerEntry e = pendingRestores.remove(p.getUniqueId());
+        if (e == null) return;
+        if (e.contents != null) {
+            p.getInventory().setContents(e.contents);
+        }
+        if (e.armor != null) {
+            p.getInventory().setArmorContents(e.armor);
+        }
+        p.getInventory().setItemInOffHand(e.offHand);
+        try {
+            p.getInventory().setHeldItemSlot(e.heldSlot);
+        } catch (Throwable ignored) {
+        }
+        p.updateInventory();
+        p.sendMessage("§6[DFS] 已恢复回滚前快照的库存。");
+    }
+
     /** 关闭：进入战斗后建议清理（但有快照允许战斗中也回滚到购买阶段） */
     public void onDisable() {
         snapshot = null;
+        pendingRestores.clear();
     }
 
     // ------------------------------------------------------------------
@@ -169,10 +206,8 @@ public final class SnapshotService {
         public int deaths;
 
         public double health;
-        public double maxHealth;
         public int food;
         public float saturation;
-        public org.bukkit.GameMode gamemode;
         public PotionEffect[] potionEffects;
 
         public ItemStack[] contents;
@@ -183,9 +218,5 @@ public final class SnapshotService {
         public String world;
         public double x, y, z;
         public float yaw, pitch;
-
-        public boolean invulnerable;
-        public boolean flying;
-        public boolean allowFlight;
     }
 }

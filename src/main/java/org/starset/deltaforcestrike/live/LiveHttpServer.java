@@ -10,6 +10,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -26,6 +27,9 @@ public final class LiveHttpServer {
     private final DeltaForceStrike plugin;
     private final LiveSnapshotService snapshots;
     private HttpServer server;
+    private ExecutorService executor;
+    /** 启动时缓存的 token 快照：YamlConfiguration 非线程安全，HTTP 线程不直接读 config */
+    private volatile String tokenCache = "";
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     public LiveHttpServer(DeltaForceStrike plugin, LiveSnapshotService snapshots) {
@@ -44,6 +48,7 @@ public final class LiveHttpServer {
             plugin.getLogger().warning("[Live] live.token 为空，拒绝启动（请设置强 token）");
             return;
         }
+        tokenCache = token;
 
         int port = plugin.getConfig().getInt("live.port", 25564);
         String bind = plugin.getConfig().getString("live.bind", "0.0.0.0");
@@ -53,17 +58,19 @@ public final class LiveHttpServer {
             server.createContext("/api/live", this::handleApi);
             server.createContext("/overlay", this::handleOverlay);
             server.createContext("/", this::handleRoot);
-            server.setExecutor(Executors.newCachedThreadPool(r -> {
+            executor = Executors.newCachedThreadPool(r -> {
                 Thread t = new Thread(r, "dfs-live-http");
                 t.setDaemon(true);
                 return t;
-            }));
+            });
+            server.setExecutor(executor);
             server.start();
             running.set(true);
             plugin.getLogger().info("[Live] 导播接口已启动 http://" + bind + ":" + port
                     + "  (鉴权: Bearer / ?token=)");
         } catch (IOException e) {
             plugin.getLogger().severe("[Live] 启动失败: " + e.getMessage());
+            shutdownExecutor();
             server = null;
             running.set(false);
         }
@@ -71,10 +78,19 @@ public final class LiveHttpServer {
 
     public synchronized void stop() {
         if (server != null) {
-            server.stop(0);
+            // 留 1s grace 让在途响应写完，0 会直接掐断
+            server.stop(1);
             server = null;
         }
+        shutdownExecutor();
         running.set(false);
+    }
+
+    private void shutdownExecutor() {
+        if (executor != null) {
+            executor.shutdownNow();
+            executor = null;
+        }
     }
 
     public boolean isRunning() {
@@ -143,8 +159,18 @@ public final class LiveHttpServer {
         send(ex, 404, "text/plain; charset=utf-8", "Not Found");
     }
 
+    /** 常量时间比较，避免长度/前缀侧信道 */
+    private static boolean tokenEquals(String expected, String actual) {
+        if (expected == null || actual == null) {
+            return false;
+        }
+        return java.security.MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8),
+                actual.getBytes(StandardCharsets.UTF_8));
+    }
+
     private boolean authorize(HttpExchange ex) {
-        String expected = plugin.getConfig().getString("live.token", "");
+        String expected = tokenCache;
         if (expected == null || expected.isBlank()) {
             return false;
         }
@@ -158,11 +184,11 @@ public final class LiveHttpServer {
                 String v = h.trim();
                 if (v.regionMatches(true, 0, "Bearer ", 0, 7)) {
                     String t = v.substring(7).trim();
-                    if (expected.equals(t)) {
+                    if (tokenEquals(expected, t)) {
                         return true;
                     }
                 }
-                if (expected.equals(v)) {
+                if (tokenEquals(expected, v)) {
                     return true;
                 }
             }
@@ -177,7 +203,7 @@ public final class LiveHttpServer {
                 }
                 String k = part.substring(0, i);
                 String v = java.net.URLDecoder.decode(part.substring(i + 1), StandardCharsets.UTF_8);
-                if ("token".equalsIgnoreCase(k) && expected.equals(v)) {
+                if ("token".equalsIgnoreCase(k) && tokenEquals(expected, v)) {
                     return true;
                 }
             }
@@ -186,7 +212,7 @@ public final class LiveHttpServer {
         List<String> xt = ex.getRequestHeaders().get("X-DFS-Token");
         if (xt != null) {
             for (String h : xt) {
-                if (expected.equals(h)) {
+                if (tokenEquals(expected, h)) {
                     return true;
                 }
             }
@@ -206,11 +232,6 @@ public final class LiveHttpServer {
         Headers h = ex.getResponseHeaders();
         h.set("Content-Type", contentType);
         addCors(h);
-        if ("OPTIONS".equalsIgnoreCase(ex.getRequestMethod())) {
-            ex.sendResponseHeaders(204, -1);
-            ex.close();
-            return;
-        }
         ex.sendResponseHeaders(code, bytes.length);
         try (OutputStream os = ex.getResponseBody()) {
             os.write(bytes);

@@ -39,8 +39,6 @@ public final class PauseService {
     private final Map<Team, Integer> tacticalLeft = new EnumMap<>(Team.class);
     /** 当前生效的暂停；null 表示无暂停 */
     private ActivePause active;
-    /** 暂停时回合剩余秒数（恢复后继续使用） */
-    private int frozenBuySeconds = -1;
 
     public PauseService(DeltaForceStrike plugin) {
         this.plugin = plugin;
@@ -95,15 +93,6 @@ public final class PauseService {
         return active == null ? 0 : active.secondsLeft;
     }
 
-    /** 购买阶段已被冻结的剩余秒数（恢复后回合沿用，-1 表示无快照） */
-    public int frozenBuySeconds() {
-        return frozenBuySeconds;
-    }
-
-    public void setFrozenBuySeconds(int sec) {
-        this.frozenBuySeconds = sec;
-    }
-
     /** 请求战术暂停。callerTeam：发起方的队伍 */
     public boolean requestTactical(Player caller) {
         Match match = plugin.getMatchManager().getMatch();
@@ -131,10 +120,10 @@ public final class PauseService {
             caller.sendMessage("§c[DFS] 本队战术暂停次数已用完。§7(加时会重置)");
             return false;
         }
-        tacticalLeft.put(team, left - 1);
 
         int duration = Math.max(1, plugin.getConfig().getInt("pause.tactical.duration-seconds", 30));
-        beginPause(PauseKind.TACTICAL, team, duration, caller.getName());
+        // 扣减随 beginPause 一并完成，避免广播后异常导致配额白扣
+        beginPause(PauseKind.TACTICAL, team, duration, caller.getName(), left - 1);
         return true;
     }
 
@@ -153,11 +142,11 @@ public final class PauseService {
             if (admin != null) admin.sendMessage("§c[DFS] 已在暂停中。§7/dfs resume");
             return false;
         }
-        beginPause(PauseKind.TECHNICAL, Team.NONE, 0, admin == null ? "console" : admin.getName());
+        beginPause(PauseKind.TECHNICAL, Team.NONE, 0, admin == null ? "console" : admin.getName(), -1);
         return true;
     }
 
-    private void beginPause(PauseKind kind, Team team, int duration, String by) {
+    private void beginPause(PauseKind kind, Team team, int duration, String by, int tacticalRemaining) {
         active = new ActivePause(kind, team, duration);
         Match match = plugin.getMatchManager().getMatch();
 
@@ -167,7 +156,8 @@ public final class PauseService {
                 : tag;
         match.broadcast("§e[DFS] " + label + " §7发起: §f" + by);
         if (kind == PauseKind.TACTICAL) {
-            match.broadcast("§7剩余 §f" + tacticalLeft(team) + " §7次");
+            tacticalLeft.put(team, Math.max(0, tacticalRemaining));
+            match.broadcast("§7剩余 §f" + Math.max(0, tacticalRemaining) + " §7次");
         } else {
             match.broadcast("§7请管理员 §f/dfs resume §7恢复");
         }
@@ -176,10 +166,6 @@ public final class PauseService {
         if (kind == PauseKind.TACTICAL && duration > 0) {
             active.task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
                 if (active == null) return;
-                if (active.kind != kind) {
-                    cancelActive();
-                    return;
-                }
                 if (active.secondsLeft <= 0) {
                     resume("战术暂停结束");
                     return;

@@ -26,6 +26,7 @@ import org.starset.deltaforcestrike.item.ItemManager;
 import org.starset.deltaforcestrike.match.Match;
 import org.starset.deltaforcestrike.match.MatchState;
 import org.starset.deltaforcestrike.match.PlayerSession;
+import org.starset.deltaforcestrike.match.RoundManager;
 import org.starset.deltaforcestrike.match.Team;
 import org.starset.deltaforcestrike.match.RoundState;
 import org.starset.deltaforcestrike.bomb.BombSites;
@@ -58,13 +59,23 @@ public class BombManager {
 
     private final Map<UUID, BukkitTask> channelTasks = new HashMap<>();
     private final Map<UUID, BossBar> channelBars = new HashMap<>();
+    /** 每个进行中读条的状态（多人可同时拆包） */
+    private final Map<UUID, ChannelState> channelStates = new HashMap<>();
+    /** HUD/导播展示的读条：多人同时拆包时展示进度最快的一个 */
+    private UUID displayChannelId;
 
-    /** 当前下包/拆包读条信息（单任务，因为同时间只有一个） */
-    private UUID channelId;
-    private String channelType; // "PLANT" | "DEFUSE"
-    private String channelPlayerName;
-    private int channelTotalTicks;
-    private int channelElapsedTicks;
+    private static final class ChannelState {
+        final String type;      // "PLANT" | "DEFUSE"
+        final String name;
+        final int totalTicks;
+        int elapsedTicks;
+
+        ChannelState(String type, String name, int totalTicks) {
+            this.type = type;
+            this.name = name;
+            this.totalTicks = totalTicks;
+        }
+    }
 
     public final class BombInfo {
         public final boolean channelActive;
@@ -94,11 +105,12 @@ public class BombManager {
 
     /** 用于 ClientUI 协议的当前下包/拆包状态视图 */
     public BombInfo info() {
-        boolean chActive = channelId != null && channelTasks.containsKey(channelId);
-        String chType = chActive ? channelType : "";
-        String chName = chActive && channelPlayerName != null ? channelPlayerName : "";
-        int elapsed = chActive ? Math.max(0, channelElapsedTicks) : 0;
-        int total = chActive ? Math.max(0, channelTotalTicks) : 0;
+        ChannelState st = displayChannelId == null ? null : channelStates.get(displayChannelId);
+        boolean chActive = st != null && channelTasks.containsKey(displayChannelId);
+        String chType = chActive ? st.type : "";
+        String chName = chActive && st.name != null ? st.name : "";
+        int elapsed = chActive ? Math.max(0, st.elapsedTicks) : 0;
+        int total = chActive ? Math.max(0, st.totalTicks) : 0;
         return new BombInfo(chActive, chType, chName, elapsed, total, planted,
                 planted ? Math.max(0, fuseLeft) : -1, lastPlanterName);
     }
@@ -171,7 +183,11 @@ public class BombManager {
         }
 
         int plantTime = plugin.getConfig().getInt("bomb.plant-time", 3);
-        Location base = plantLoc;
+        // 玩家在包点内时以玩家脚下为安装点（CS 习惯，且与完成判定一致）；
+        // 仅预安放位置在包点（探身点击）时才用方块上方
+        Location base = BombSites.isInAnySite(player.getLocation())
+                ? player.getLocation().getBlock().getLocation().add(0.5, 0, 0.5)
+                : plantLoc;
 
         startChannel(player, plantTime,
                 Component.text("安装改造TNT…", NamedTextColor.RED),
@@ -180,7 +196,9 @@ public class BombManager {
                     if (cannotPlant(player, plugin.getMatchManager().getMatch()) || planted) {
                         return;
                     }
-                    if (!BombSites.isInAnySite(player.getLocation())) {
+                    // 与开始判定对称：玩家或安装点任一在包点即可
+                    if (!BombSites.isInAnySite(player.getLocation())
+                            && !BombSites.isInAnySite(base)) {
                         player.sendMessage("§c已离开包点，安装失败。");
                         return;
                     }
@@ -230,6 +248,12 @@ public class BombManager {
 
         match.broadcast("§4§l[DFS] 改造TNT已安装！§c" + fuseLeft + " §4秒后爆炸！");
         match.getRoundManager().onBombPlanted();
+
+        // onBombPlanted 在 CT 全灭时会直接结算本回合（内部 reset 已清理状态），
+        // 此时不应再启动引信/滴滴，避免留下幽灵任务
+        if (!planted || plantLocation == null) {
+            return;
+        }
 
         cancelFuse();
         startBeepLoop();
@@ -468,6 +492,7 @@ public class BombManager {
                 double radius = plugin.getConfig().getDouble("bomb.damage-radius", 60.0);
                 double maxDamage = plugin.getConfig().getDouble("bomb.damage", 50.0);
                 boolean falloff = plugin.getConfig().getBoolean("bomb.damage-falloff", true);
+                double minDamage = plugin.getConfig().getDouble("bomb.damage-min", 2.0);
 
                 for (Player p : loc.getWorld().getPlayers()) {
                     if (!plugin.getMatchManager().isInMatch(p)) {
@@ -487,7 +512,7 @@ public class BombManager {
                     }
 
                     double dmg = falloff
-                            ? damageByDistance(dist, radius, maxDamage)
+                            ? damageByDistance(dist, radius, maxDamage, minDamage)
                             : maxDamage;
                     if (dmg <= 0) {
                         continue;
@@ -517,13 +542,14 @@ public class BombManager {
             RoundState rs = match.getRoundManager().getState();
             if (rs != RoundState.ROUND_END && rs != RoundState.IDLE) {
                 match.broadcast("§4§l[DFS] 改造TNT爆炸！进攻方胜利！");
-                match.getRoundManager().endRound(Team.T, "炸弹爆炸");
+                match.getRoundManager().endRound(
+                        Team.T, "炸弹爆炸", RoundManager.WinType.BOMB_DETONATED);
             }
         }
     }
 
     /** 0-20% 100% | 20-40% 75% | 40-60% 50% | 60-80% 30% | 80-100% 15% */
-    private double damageByDistance(double dist, double radius, double maxDamage) {
+    private double damageByDistance(double dist, double radius, double maxDamage, double minDamage) {
         if (radius <= 0 || dist > radius) {
             return 0;
         }
@@ -540,7 +566,7 @@ public class BombManager {
         } else {
             mult = 0.15;
         }
-        return Math.max(2.0, maxDamage * mult);
+        return Math.max(minDamage, maxDamage * mult);
     }
 
     // =====================================================================
@@ -617,7 +643,8 @@ public class BombManager {
             defuser.addMoney(plugin.getConfig().getInt("economy.defuse-reward", 200));
         }
         match.broadcast("§b§l[DFS] " + player.getName() + " 拆除了改造TNT！");
-        match.getRoundManager().endRound(Team.CT, "拆除炸弹");
+        match.getRoundManager().endRound(
+                Team.CT, "拆除炸弹", RoundManager.WinType.BOMB_DEFUSED);
     }
 
     // =====================================================================
@@ -638,12 +665,8 @@ public class BombManager {
         Location start = player.getLocation().clone();
         int total = Math.max(1, seconds) * 20;
         final int[] tick = {0};
-
-        channelId = player.getUniqueId();
-        channelType = type;
-        channelPlayerName = player.getName();
-        channelTotalTicks = total;
-        channelElapsedTicks = 0;
+        channelStates.put(player.getUniqueId(), new ChannelState(type, player.getName(), total));
+        repointDisplayChannel(player.getUniqueId());
 
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (!player.isOnline()) {
@@ -656,7 +679,10 @@ public class BombManager {
                 return;
             }
             tick[0]++;
-            channelElapsedTicks = tick[0];
+            ChannelState st = channelStates.get(player.getUniqueId());
+            if (st != null) {
+                st.elapsedTicks = tick[0];
+            }
             bar.progress(Math.max(0f, 1f - (float) tick[0] / total));
             if (tick[0] >= total) {
                 cancelChannel(player);
@@ -679,12 +705,17 @@ public class BombManager {
             } catch (Exception ignored) {
             }
         }
-        if (id.equals(channelId)) {
-            channelId = null;
-            channelType = null;
-            channelPlayerName = null;
-            channelTotalTicks = 0;
-            channelElapsedTicks = 0;
+        channelStates.remove(id);
+        if (id.equals(displayChannelId)) {
+            repointDisplayChannel(null);
+        }
+    }
+
+    /** 松开潜行只应打断拆包读条，不能误杀进行中的安装读条 */
+    public void cancelDefuseChannel(Player player) {
+        ChannelState st = channelStates.get(player.getUniqueId());
+        if (st != null && "DEFUSE".equals(st.type)) {
+            cancelChannel(player);
         }
     }
 
@@ -699,8 +730,30 @@ public class BombManager {
                     t.cancel();
                 }
                 channelBars.remove(id);
+                channelStates.remove(id);
             }
         }
+        repointDisplayChannel(null);
+    }
+
+    /** 展示槽指向进度最快的活跃读条（prefer 非空时优先指向它） */
+    private void repointDisplayChannel(UUID prefer) {
+        if (prefer != null && channelStates.containsKey(prefer)) {
+            displayChannelId = prefer;
+            return;
+        }
+        UUID best = null;
+        int bestElapsed = -1;
+        for (Map.Entry<UUID, ChannelState> e : channelStates.entrySet()) {
+            if (!channelTasks.containsKey(e.getKey())) {
+                continue;
+            }
+            if (e.getValue().elapsedTicks > bestElapsed) {
+                bestElapsed = e.getValue().elapsedTicks;
+                best = e.getKey();
+            }
+        }
+        displayChannelId = best;
     }
 
     private void cancelFuse() {
@@ -716,15 +769,7 @@ public class BombManager {
     }
 
     public boolean isPlantBomb(ItemStack stack) {
-        if (stack == null || stack.getType().isAir()) {
-            return false;
-        }
-        ItemManager items = plugin.getItemManager();
-        if ("bomb".equalsIgnoreCase(items.getItemType(stack))) {
-            return true;
-        }
-        String id = items.getItemId(stack);
-        return id != null && id.contains("plant-bomb");
+        return plugin.getItemManager().isPlantBomb(stack);
     }
 
     private boolean hasDefuseKit(Player player) {

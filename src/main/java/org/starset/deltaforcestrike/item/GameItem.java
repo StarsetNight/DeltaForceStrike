@@ -27,6 +27,8 @@ public final class GameItem {
     private final double attackSpeed;
     /** 护甲韧性（套装合计）；≤0 不附加 */
     private final double armorToughness;
+    /** 击杀奖励覆盖（≤0 = 使用全局 economy.kill-reward） */
+    private final int killReward;
     private final Map<String, Integer> enchantments;
     private final Map<String, Material> armorPieces;
 
@@ -44,6 +46,7 @@ public final class GameItem {
         this.attackDamage = b.attackDamage;
         this.attackSpeed = b.attackSpeed;
         this.armorToughness = b.armorToughness;
+        this.killReward = b.killReward;
         this.enchantments = Collections.unmodifiableMap(b.enchantments);
         this.armorPieces = Collections.unmodifiableMap(b.armorPieces);
     }
@@ -62,6 +65,7 @@ public final class GameItem {
         b.attackDamage = section.getDouble("attack-damage", 0);
         b.attackSpeed = section.getDouble("attack-speed", 0);
         b.armorToughness = section.getDouble("armor-toughness", 0);
+        b.killReward = section.getInt("kill-reward", 0);
 
         String mat = section.getString("material");
         if (mat != null && !mat.isEmpty()) {
@@ -109,6 +113,8 @@ public final class GameItem {
     public double getAttackSpeed() { return attackSpeed; }
     /** ≤0 = 不附加韧性 */
     public double getArmorToughness() { return armorToughness; }
+    /** ≤0 = 使用全局 economy.kill-reward */
+    public int getKillReward() { return killReward; }
     public Map<String, Integer> getEnchantments() { return enchantments; }
     public Map<String, Material> getArmorPieces() { return armorPieces; }
 
@@ -131,6 +137,7 @@ public final class GameItem {
         double attackDamage;
         double attackSpeed;
         double armorToughness;
+        int killReward;
         Map<String, Integer> enchantments = new HashMap<>();
         Map<String, Material> armorPieces = new HashMap<>();
     }

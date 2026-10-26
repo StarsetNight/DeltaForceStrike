@@ -173,7 +173,7 @@ public final class DeltaForceStrike extends JavaPlugin {
         getServer().getScheduler().runTaskTimer(this, hudSyncService::tick, 10L, 10L);
 
         // 导播快照（主线程，默认 5 tick≈0.25s，金钱/血量近实时）+ HTTP 服务
-        int liveRefresh = Math.max(2, getConfig().getInt("live.refresh-ticks", 5));
+        int liveRefresh = org.starset.deltaforcestrike.config.ConfigKeys.liveRefreshTicks();
         getServer().getScheduler().runTaskTimer(this, liveSnapshotService::tick, liveRefresh, liveRefresh);
         liveHttpServer.start();
 

@@ -22,12 +22,21 @@ public class NikoBerserkHandler implements SkillHandler {
                 continue;
             }
             p.addPotionEffect(new PotionEffect(spec.type(), ticks, spec.amplifier(), false, true, true));
+            ctx.loadout().recordUltimateEffect(spec.type());
         }
         if (ctx.skill().getEffects().isEmpty()) {
-            p.addPotionEffect(new PotionEffect(org.bukkit.potion.PotionEffectType.SPEED, ticks, 1));
-            p.addPotionEffect(new PotionEffect(org.bukkit.potion.PotionEffectType.JUMP_BOOST, ticks, 0));
-            p.addPotionEffect(new PotionEffect(org.bukkit.potion.PotionEffectType.RESISTANCE, ticks, 0));
-            p.addPotionEffect(new PotionEffect(org.bukkit.potion.PotionEffectType.STRENGTH, ticks, 0));
+            var speed = org.bukkit.potion.PotionEffectType.SPEED;
+            var jump = org.bukkit.potion.PotionEffectType.JUMP_BOOST;
+            var resist = org.bukkit.potion.PotionEffectType.RESISTANCE;
+            var strength = org.bukkit.potion.PotionEffectType.STRENGTH;
+            p.addPotionEffect(new PotionEffect(speed, ticks, 1));
+            p.addPotionEffect(new PotionEffect(jump, ticks, 0));
+            p.addPotionEffect(new PotionEffect(resist, ticks, 0));
+            p.addPotionEffect(new PotionEffect(strength, ticks, 0));
+            ctx.loadout().recordUltimateEffect(speed);
+            ctx.loadout().recordUltimateEffect(jump);
+            ctx.loadout().recordUltimateEffect(resist);
+            ctx.loadout().recordUltimateEffect(strength);
         }
         ctx.loadout().setUltimateActiveThisRound(true);
         return SkillResult.ok("狂起来吧！");

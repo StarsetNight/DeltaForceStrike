@@ -102,7 +102,16 @@ public class ShopListener implements Listener {
         if (plugin.getScoreboardService() != null) {
             plugin.getScoreboardService().update(player);
         }
-        ShopGUI.open(player);
+        // 下一 tick 再重开商店：点击事件内直接 open 容易产生视图不同步/幽灵物品
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            if (!player.isOnline()) {
+                return;
+            }
+            Match now = plugin.getMatchManager().getMatch();
+            if (now == match && now.getRoundManager().getState() == RoundState.BUY) {
+                ShopGUI.open(player);
+            }
+        });
     }
 
     @EventHandler

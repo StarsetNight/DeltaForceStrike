@@ -56,6 +56,8 @@ public final class SpectatorRoleManager {
 
         PlayerState.clearInventory(player);
         PlayerState.clearPotionEffects(player);
+        // resetExtras 清掉光标物品/经验/吸收/滑翔等残留
+        PlayerState.resetExtras(player);
         player.setFireTicks(0);
         player.setFallDistance(0f);
 

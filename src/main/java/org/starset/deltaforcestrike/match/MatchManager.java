@@ -24,7 +24,6 @@ import org.starset.deltaforcestrike.util.Worlds;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 public class MatchManager {
@@ -241,12 +240,6 @@ public class MatchManager {
         }
 
         MatchState state = match.getState();
-        PlayerSession session = match.getSession(player.getUniqueId());
-        if (session != null) {
-            session.setConnected(false);
-            session.setAlive(false);
-        }
-
         match.getSessions().remove(player.getUniqueId());
         if (plugin.getOperatorService() != null) {
             plugin.getOperatorService().clearPlayer(player.getUniqueId());
@@ -257,6 +250,9 @@ public class MatchManager {
         safeSpectatorClear(player);
         if (player.isOnline()) {
             player.setInvulnerable(false);
+            // 带走对局物品离开战场会造成装备流失/复制面，就地清掉
+            PlayerState.clearInventory(player);
+            PlayerState.clearPotionEffects(player);
         }
 
         match.broadcast("§e[DFS] §f" + player.getName() + " §7已离开。 §8(" + match.size() + ")");
@@ -268,7 +264,9 @@ public class MatchManager {
             }
         } else if (state == MatchState.IN_PROGRESS) {
             match.getRoundManager().checkWipe();
-            if (match.size() == 0 || match.onlineCount() == 0) {
+            // 参赛选手全部离开（含只剩观战/导播）时对局已无意义，直接结束，
+            // 避免空队伍挂到回合超时
+            if (match.onlineCount() == 0 || match.playingCount() == 0) {
                 forceEnd("所有玩家已离开。");
             }
         } else if (state == MatchState.AGENT_SELECT && match.size() == 0) {
@@ -393,6 +391,10 @@ public class MatchManager {
             player.setAllowFlight(false);
             plugin.getGameRulesService().fillHealth(player);
             plugin.getGameRulesService().fillFood(player);
+            // 回滚期间断线的玩家：恢复回滚前快照的库存，避免经济/装备分叉
+            if (plugin.getSnapshotService() != null) {
+                plugin.getSnapshotService().applyPendingRestore(player);
+            }
             if (session.hasTeam()) {
                 teleportTeamSpawn(player, session.getTeam());
             } else {
@@ -443,7 +445,11 @@ public class MatchManager {
         }
     }
 
-    /** 加入旁观者（占房间名额：spectator + T + CT = max）。仅对局中可用。 */
+    /**
+     * 加入旁观者（占房间名额：spectator + T + CT = max）。
+     * 各阶段均可加入（选边界面在等待/倒计时阶段提供入口）；
+     * 观战 session 不参与补队/发放装备/存活判定，由 RoundManager 按 isPlaying 过滤。
+     */
     public boolean joinAsSpectator(Player player) {
         if (player == null) return false;
         if (!Worlds.isArena(player)) {
@@ -675,7 +681,7 @@ public class MatchManager {
 
             if (agentLeft <= 5 || agentLeft == 15 || agentLeft == 30) {
                 match.broadcast("§d[DFS] 干员选择剩余 §f" + agentLeft
-                        + "s §7· 已选 " + countOperatorsSelected() + "/" + match.size());
+                        + "s §7· 已选 " + countOperatorsSelected() + "/" + match.playingCount());
                 // 提醒未选的人
                 for (Player p : match.onlinePlayers()) {
                     PlayerSession s = match.getSession(p.getUniqueId());
@@ -691,11 +697,11 @@ public class MatchManager {
 
     /** 是否所有在线参赛者都已选定干员 */
     private boolean allOperatorsSelected() {
-        if (match == null || match.size() == 0) {
+        if (match == null || match.playingCount() == 0) {
             return false;
         }
         for (PlayerSession s : match.getSessions().values()) {
-            if (!s.isConnected()) {
+            if (!s.isConnected() || !s.isPlaying()) {
                 continue;
             }
             if (s.getOperatorId() == null || s.getOperatorId().isEmpty()) {
@@ -711,7 +717,8 @@ public class MatchManager {
         }
         int n = 0;
         for (PlayerSession s : match.getSessions().values()) {
-            if (s.isConnected() && s.getOperatorId() != null && !s.getOperatorId().isEmpty()) {
+            if (s.isConnected() && s.isPlaying()
+                    && s.getOperatorId() != null && !s.getOperatorId().isEmpty()) {
                 n++;
             }
         }
@@ -797,10 +804,12 @@ public class MatchManager {
         if (self == null) {
             return false;
         }
-        // 选择 T/CT 即视为参赛选手（从观战/导播切回）
+        // 选择 T/CT 即视为参赛选手（从观战/导播切回），并按新选手补发起始资金，
+        // 否则观战转参赛的玩家会带着 $0 打完整个上半场
         if (!self.isPlaying()) {
             self.setRole(SpectatorRole.PLAYING);
             self.setAlive(true);
+            self.setMoney(plugin.getConfig().getInt("economy.start-money", 800));
             player.sendMessage("§a[DFS] 你已切换为参赛选手。");
             if (plugin.getSpectatorRoleManager() != null) {
                 plugin.getSpectatorRoleManager().clear(player);
@@ -837,7 +846,8 @@ public class MatchManager {
         }
         int teamSize = ConfigKeys.teamSize();
         for (PlayerSession s : match.getSessions().values()) {
-            if (s.hasTeam()) {
+            // 只给参赛选手补队：观战/导播没有队伍也不能变成“幽灵选手”
+            if (s.hasTeam() || !s.isPlaying()) {
                 continue;
             }
             long t = match.countTeam(Team.T);
@@ -857,21 +867,29 @@ public class MatchManager {
         if (match == null) {
             return;
         }
-        List<PlayerSession> all = new ArrayList<>(match.getSessions().values());
-        long t = match.countTeam(Team.T);
-        long ct = match.countTeam(Team.CT);
-        if (all.size() == teamSize * 2 && t == teamSize && ct == teamSize) {
-            return;
-        }
-        Collections.shuffle(all);
-        if (all.size() == teamSize * 2) {
-            for (int i = 0; i < all.size(); i++) {
-                all.get(i).setTeam(i < teamSize ? Team.T : Team.CT);
+        // 只处理超编：把超额一方的队尾选手移到另一方，
+        // 不打乱其余已选边玩家的自主选择
+        List<PlayerSession> t = new ArrayList<>();
+        List<PlayerSession> ct = new ArrayList<>();
+        for (PlayerSession s : match.getSessions().values()) {
+            if (!s.isPlaying() || !s.hasTeam()) {
+                continue;
             }
-            return;
+            if (s.getTeam() == Team.T) {
+                t.add(s);
+            } else {
+                ct.add(s);
+            }
         }
-        for (int i = 0; i < all.size(); i++) {
-            all.get(i).setTeam(i % 2 == 0 ? Team.T : Team.CT);
+        while (t.size() > teamSize && ct.size() < teamSize) {
+            PlayerSession s = t.remove(t.size() - 1);
+            s.setTeam(Team.CT);
+            ct.add(s);
+        }
+        while (ct.size() > teamSize && t.size() < teamSize) {
+            PlayerSession s = ct.remove(ct.size() - 1);
+            s.setTeam(Team.T);
+            t.add(s);
         }
     }
 
@@ -901,6 +919,10 @@ public class MatchManager {
         }
         if (plugin.getSnapshotService() != null) {
             plugin.getSnapshotService().clear();
+        }
+        // 新对局清空导播击杀流，避免上一局的条目残留
+        if (plugin.getLiveKillFeedService() != null) {
+            plugin.getLiveKillFeedService().clear();
         }
         match.getRoundManager().resetForNewMatch();
         match.setOvertime(false);
@@ -1064,14 +1086,9 @@ public class MatchManager {
         cancelTasks();
         cancelEndWindow();
 
-        // 若在下半场被 stop 结束：把比赛情况重置到上半场（比分对调回），
-        // 避免最终比分展示为换边后口径、且下一场残留下半场标记
-        if (match.getRoundManager().isHalfTimeSwapped() && !match.isOvertime()) {
-            match.swapScores();
-            if (reason == null || reason.isEmpty()) {
-                reason = "比赛重置到上半场后结束";
-            }
-        }
+        // 不再把比分对调回上半场口径：session 队伍没有随之换回，
+        // 对调后 winner 与玩家实际阵营相反，会给出反转的胜负标题。
+        // 直接按当前口径结算，与自然结束路径一致。
 
         match.setState(MatchState.ENDING);
         match.getRoundManager().shutdown();
@@ -1199,7 +1216,8 @@ public class MatchManager {
                 PlayerSession ks = match.getSession(killer.getUniqueId());
                 if (ks != null && match.contains(killer.getUniqueId()) && vs.getTeam() != ks.getTeam()) {
                     ks.addKill();
-                    ks.addMoney(plugin.getConfig().getInt("economy.kill-reward", 300));
+                    // 击杀奖励按武器分档（近战/物品级 kill-reward 可覆盖全局默认）
+                    ks.addMoney(plugin.getItemManager().resolveKillReward(killer));
                     if (plugin.getOperatorService() != null) {
                         plugin.getOperatorService().onKill(killer);
                     }
@@ -1274,84 +1292,54 @@ public class MatchManager {
         player.setFallDistance(0f);
     }
 
-    private void safeScoreboardCreate(Player player) {
-        try {
-            if (plugin.getScoreboardService() != null) {
-                plugin.getScoreboardService().create(player);
-            }
-        } catch (Throwable t) {
-            plugin.getLogger().warning("Scoreboard create: " + t.getMessage());
+    /** 通用 UI 安全调用：服务缺省或抛异常都不打断对局流程 */
+    private <T> void safe(String what, T service, java.util.function.Consumer<T> action) {
+        if (service == null) {
+            return;
         }
+        try {
+            action.accept(service);
+        } catch (Throwable t) {
+            plugin.getLogger().warning(what + ": " + t.getMessage());
+        }
+    }
+
+    private void safeScoreboardCreate(Player player) {
+        safe("Scoreboard create", plugin.getScoreboardService(), s -> s.create(player));
     }
 
     private void safeScoreboardRemove(Player player) {
-        try {
-            if (plugin.getScoreboardService() != null) {
-                plugin.getScoreboardService().remove(player);
-            }
-        } catch (Throwable t) {
-            plugin.getLogger().warning("Scoreboard remove: " + t.getMessage());
-        }
+        safe("Scoreboard remove", plugin.getScoreboardService(), s -> s.remove(player));
     }
 
     private void safeScoreboardRemoveAll() {
-        try {
-            if (plugin.getScoreboardService() != null) {
-                plugin.getScoreboardService().removeAll();
-            }
-        } catch (Throwable t) {
-            plugin.getLogger().warning("Scoreboard removeAll: " + t.getMessage());
-        }
+        safe("Scoreboard removeAll", plugin.getScoreboardService(), s -> s.removeAll());
     }
 
     private void safeScoreboardUpdate(Player player) {
-        try {
-            if (plugin.getScoreboardService() != null) {
-                plugin.getScoreboardService().update(player);
-            }
-        } catch (Throwable t) {
-            plugin.getLogger().warning("Scoreboard update: " + t.getMessage());
-        }
+        safe("Scoreboard update", plugin.getScoreboardService(), s -> s.update(player));
     }
 
     private void safeScoreboardUpdateAll() {
-        try {
-            if (plugin.getScoreboardService() != null && match != null) {
-                plugin.getScoreboardService().updateAll(match);
-            }
-        } catch (Throwable t) {
-            plugin.getLogger().warning("Scoreboard updateAll: " + t.getMessage());
+        if (match == null) {
+            return;
         }
+        safe("Scoreboard updateAll", plugin.getScoreboardService(), s -> s.updateAll(match));
     }
 
     private void safeTabUpdate(Player player) {
-        try {
-            if (plugin.getTabListService() != null) {
-                plugin.getTabListService().update(player);
-            }
-        } catch (Throwable t) {
-            plugin.getLogger().warning("Tab update: " + t.getMessage());
-        }
+        safe("Tab update", plugin.getTabListService(), s -> s.update(player));
     }
 
     private void safeTabUpdateAll() {
-        try {
-            if (plugin.getTabListService() != null && match != null) {
-                plugin.getTabListService().updateAll(match);
-            }
-        } catch (Throwable t) {
-            plugin.getLogger().warning("Tab updateAll: " + t.getMessage());
+        if (match == null) {
+            return;
         }
+        safe("Tab updateAll", plugin.getTabListService(), s -> s.updateAll(match));
     }
 
     private void safeTabReset(Player player) {
-        try {
-            if (plugin.getTabListService() != null) {
-                plugin.getTabListService().reset(player);
-            }
-        } catch (Throwable t) {
-            plugin.getLogger().warning("Tab reset: " + t.getMessage());
-        }
+        safe("Tab reset", plugin.getTabListService(), s -> s.reset(player));
     }
 
     private void safeSpectatorClear(Player player) {

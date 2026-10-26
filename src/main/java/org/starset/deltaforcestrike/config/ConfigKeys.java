@@ -49,6 +49,35 @@ public final class ConfigKeys {
         return Math.max(0, cfg().getInt("economy.max-money", 16000));
     }
 
+    /** 胜场目标（HUD/导播快照与回合逻辑共用同一默认值） */
+    public static int winTarget(boolean overtime) {
+        if (overtime) {
+            return cfg().getInt("overtime.win-target", 4);
+        }
+        return cfg().getInt("match.win-target", 13);
+    }
+
+    /** 半场回合数（普通/加时共用入口，避免默认值双份硬编码） */
+    public static int halfRound(boolean overtime) {
+        if (overtime) {
+            return cfg().getInt("overtime.half-round", 3);
+        }
+        return cfg().getInt("match.half-round", 12);
+    }
+
+    /** 最多回合数 */
+    public static int maxRounds(boolean overtime) {
+        if (overtime) {
+            return cfg().getInt("overtime.max-rounds", 6);
+        }
+        return cfg().getInt("match.max-rounds", 24);
+    }
+
+    /** 导播快照刷新间隔（tick），下限 2 */
+    public static int liveRefreshTicks() {
+        return Math.max(2, cfg().getInt("live.refresh-ticks", 5));
+    }
+
     /**
      * 读取 locations.xxx；缺键返回 null。
      */

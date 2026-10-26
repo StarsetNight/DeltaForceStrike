@@ -121,6 +121,56 @@ public class ItemManager {
                 .get(ItemKeys.type(), PersistentDataType.STRING);
     }
 
+    /**
+     * 统一的「改造TNT」判定（全项目唯一实现）：
+     * type=bomb，或 id 含 plant-bomb（大小写不敏感），排除拆除钳。
+     */
+    public boolean isPlantBomb(ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) {
+            return false;
+        }
+        String type = getItemType(stack);
+        if (type != null && "defuse".equalsIgnoreCase(type)) {
+            return false;
+        }
+        String action = null;
+        if (stack.hasItemMeta()) {
+            action = stack.getItemMeta().getPersistentDataContainer()
+                    .get(ItemKeys.action(), PersistentDataType.STRING);
+        }
+        if (action != null && "defuse".equalsIgnoreCase(action)) {
+            return false;
+        }
+        String id = getItemId(stack);
+        if (id != null && id.toLowerCase(Locale.ROOT).contains("defuse")) {
+            return false;
+        }
+        if ("bomb".equalsIgnoreCase(type)) {
+            return true;
+        }
+        return action != null && "plant".equalsIgnoreCase(action);
+    }
+
+    /**
+     * 击杀奖励：优先用击杀者手持自定义物品的 kill-reward，否则全局默认。
+     */
+    public int resolveKillReward(Player killer) {
+        int fallback = plugin.getConfig().getInt("economy.kill-reward", 300);
+        if (killer == null) {
+            return fallback;
+        }
+        ItemStack held = killer.getInventory().getItemInMainHand();
+        GameItem def = held == null ? null : items.get(getItemId(held));
+        if (def != null && def.getKillReward() > 0) {
+            return def.getKillReward();
+        }
+        // 近战类型默认给 CS 式高额刀杀奖励（可被全局键覆盖）
+        if (def != null && "melee".equalsIgnoreCase(def.getType())) {
+            return plugin.getConfig().getInt("economy.kill-reward-melee", 1500);
+        }
+        return fallback;
+    }
+
     public boolean isUndroppable(ItemStack stack) {
         if (stack == null || !stack.hasItemMeta()) {
             return false;

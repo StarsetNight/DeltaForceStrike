@@ -46,6 +46,23 @@ public final class TournamentListener implements PluginMessageListener, Listener
         });
     }
 
+    /**
+     * 从大堂/主世界传送进入竞技世界的玩家不会触发 PlayerJoinEvent，
+     * 必须监听换世界，否则可绕过赛事握手无限期逗留。
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onChangedWorld(org.bukkit.event.player.PlayerChangedWorldEvent e) {
+        TournamentService svc = plugin.getTournamentService();
+        if (svc == null || !svc.isEnabled()) return;
+        Player p = e.getPlayer();
+        if (!Worlds.isArena(p)) return;
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            if (p.isOnline() && Worlds.isArena(p)) {
+                svc.onJoin(p);
+            }
+        });
+    }
+
     @EventHandler
     public void onQuit(PlayerQuitEvent e) {
         TournamentService svc = plugin.getTournamentService();

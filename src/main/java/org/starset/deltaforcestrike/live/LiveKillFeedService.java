@@ -16,11 +16,17 @@ public final class LiveKillFeedService {
 
     private final ConcurrentLinkedDeque<Entry> entries = new ConcurrentLinkedDeque<>();
     private final AtomicLong seq = new AtomicLong(0);
+    /** 进程级随机偏移：服务重启后 id 不再归零，避免 OBS 页面去重误吞新对局击杀 */
+    private static final long ID_OFFSET = (long) (Math.random() * 1_000_000) * 1_000_000L;
+
+    private long nextId() {
+        return seq.incrementAndGet() + ID_OFFSET;
+    }
 
     public void pushPlayerKill(String killer, String weapon, String victim,
                                String killerTeam, String victimTeam) {
         push(new Entry(
-                seq.incrementAndGet(),
+                nextId(),
                 System.currentTimeMillis(),
                 "player",
                 nullToEmpty(killer),
@@ -33,7 +39,7 @@ public final class LiveKillFeedService {
 
     public void pushBombKill(String victim, String victimTeam) {
         push(new Entry(
-                seq.incrementAndGet(),
+                nextId(),
                 System.currentTimeMillis(),
                 "bomb",
                 "",
@@ -46,7 +52,7 @@ public final class LiveKillFeedService {
 
     public void pushWorldKill(String cause, String victim, String victimTeam) {
         push(new Entry(
-                seq.incrementAndGet(),
+                nextId(),
                 System.currentTimeMillis(),
                 "world",
                 "",

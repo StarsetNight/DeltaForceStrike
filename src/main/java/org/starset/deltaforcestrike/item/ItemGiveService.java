@@ -475,7 +475,8 @@ public final class ItemGiveService {
             inv.setItem(i, new ItemStack(Material.ARROW, put));
             remain -= put;
         }
-        for (int i = 3; i <= 8 && remain > 0; i++) {
+        // 只允许写 3-5 道具槽；6/7/8 是技能槽，绝不能被箭占用
+        for (int i = 3; i <= 5 && remain > 0; i++) {
             ItemStack cur = inv.getItem(i);
             if (cur != null && !cur.getType().isAir()) {
                 continue;

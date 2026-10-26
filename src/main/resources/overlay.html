@@ -340,6 +340,8 @@
   const killfeed = el('killfeed');
 
   let lastServerTime = 0;
+  // 服务器时钟 - 本机时钟 的偏移，首帧计算后用于计时器修正
+  let clockOffsetMs = 0;
   let lastSecondsLeft = 0;
   let lastBomb = false;
   /** 已插入 DOM 的击杀 id → 时间戳 */
@@ -441,6 +443,8 @@
     }
     players.forEach(p => {
       if (!p.position || (p.team !== 'T' && p.team !== 'CT')) return;
+      // 掉线玩家的位置是服务端兜底零点，不画伪点
+      if (p.connected === false) return;
       const pos = worldToRadar(map, p.position.x, p.position.z);
       const d = document.createElement('div');
       d.className = 'dot ' + p.team.toLowerCase() + (p.alive ? '' : ' dead');
@@ -525,7 +529,13 @@
     el('scoreT').textContent = match.scoreT ?? 0;
     el('scoreCT').textContent = match.scoreCT ?? 0;
 
-    lastServerTime = data.serverTime || Date.now();
+    if (data.serverTime) {
+      // 首帧/持续校准：服务器时刻与本机时刻的差值
+      clockOffsetMs = data.serverTime - Date.now();
+      lastServerTime = data.serverTime;
+    } else {
+      lastServerTime = Date.now();
+    }
     lastSecondsLeft = match.secondsLeft ?? 0;
     lastBomb = !!match.bombPlanted;
     tickTimerDisplay();
@@ -584,7 +594,9 @@
 
   function tickTimerDisplay() {
     if (!lastServerTime) return;
-    const elapsed = (Date.now() - lastServerTime) / 1000;
+    // 用首帧计算的时钟偏移修正本机与服务器的时钟差，
+    // 否则两端时钟不同步时计时器会冻结在 0:00 或直接跳完
+    const elapsed = (Date.now() + clockOffsetMs - lastServerTime) / 1000;
     const sec = Math.max(0, lastSecondsLeft - elapsed);
     const timer = el('timer');
     timer.textContent = fmtTime(sec);

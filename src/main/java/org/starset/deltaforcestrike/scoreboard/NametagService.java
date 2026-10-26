@@ -25,6 +25,8 @@ public class NametagService {
     private static final String TEAM_SPEC = "dfs_spec";
 
     private final DeltaForceStrike plugin;
+    /** 每个观众的分组签名：成员集合未变化时跳过全量重建（每秒 tick 不再刷包/闪烁） */
+    private final java.util.Map<java.util.UUID, String> lastSignature = new java.util.HashMap<>();
 
     public NametagService(DeltaForceStrike plugin) {
         this.plugin = plugin;
@@ -43,9 +45,37 @@ public class NametagService {
 
         Match match = plugin.getMatchManager().getMatch();
         if (match == null || !match.contains(viewer.getUniqueId())) {
-            clearTeams(board);
+            if (lastSignature.remove(viewer.getUniqueId()) != null) {
+                clearTeams(board);
+            }
             return;
         }
+
+        // 计算期望分组；与上次一致则跳过重建
+        StringBuilder sig = new StringBuilder();
+        java.util.TreeMap<String, String> desired = new java.util.TreeMap<>();
+        for (Player p : match.onlinePlayers()) {
+            PlayerSession session = match.getSession(p.getUniqueId());
+            String entry = p.getName();
+            String group;
+            if (session == null || !session.hasTeam()
+                    || !session.isAlive() || p.getGameMode() == GameMode.SPECTATOR) {
+                group = TEAM_SPEC;
+            } else {
+                group = switch (session.getTeam()) {
+                    case T -> TEAM_T;
+                    case CT -> TEAM_CT;
+                    default -> TEAM_SPEC;
+                };
+            }
+            desired.put(entry, group);
+            sig.append(entry).append('>').append(group).append(';');
+        }
+        String sigStr = sig.toString();
+        if (sigStr.equals(lastSignature.get(viewer.getUniqueId()))) {
+            return;
+        }
+        lastSignature.put(viewer.getUniqueId(), sigStr);
 
         Team tTeam = getOrCreate(board, TEAM_T);
         Team ctTeam = getOrCreate(board, TEAM_CT);
@@ -68,25 +98,13 @@ public class NametagService {
         clearEntries(ctTeam);
         clearEntries(specTeam);
 
-        for (Player p : match.onlinePlayers()) {
-            PlayerSession session = match.getSession(p.getUniqueId());
-            String entry = p.getName();
-
-            if (session == null || !session.hasTeam()) {
-                addEntry(specTeam, entry);
-                continue;
-            }
-
-            if (!session.isAlive() || p.getGameMode() == GameMode.SPECTATOR) {
-                addEntry(specTeam, entry);
-                continue;
-            }
-
-            switch (session.getTeam()) {
-                case T -> addEntry(tTeam, entry);
-                case CT -> addEntry(ctTeam, entry);
-                default -> addEntry(specTeam, entry);
-            }
+        for (java.util.Map.Entry<String, String> e : desired.entrySet()) {
+            Team target = switch (e.getValue()) {
+                case TEAM_T -> tTeam;
+                case TEAM_CT -> ctTeam;
+                default -> specTeam;
+            };
+            addEntry(target, e.getKey());
         }
     }
 
@@ -103,6 +121,7 @@ public class NametagService {
         if (player == null) {
             return;
         }
+        lastSignature.remove(player.getUniqueId());
         Scoreboard board = player.getScoreboard();
         if (board != null && !board.equals(Bukkit.getScoreboardManager().getMainScoreboard())) {
             clearTeams(board);
