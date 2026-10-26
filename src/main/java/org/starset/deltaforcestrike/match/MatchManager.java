@@ -532,7 +532,7 @@ public class MatchManager {
         if (match == null) {
             return;
         }
-        if (match.getState() != MatchState.WAITING && match.getState() != MatchState.COUNTDOWN) {
+        if (!org.starset.deltaforcestrike.match.rules.RoundRules.canStartCountdown(match.getState())) {
             return;
         }
 
@@ -791,7 +791,7 @@ public class MatchManager {
         if (match == null) {
             return false;
         }
-        if (match.getState() != MatchState.WAITING && match.getState() != MatchState.COUNTDOWN) {
+        if (!org.starset.deltaforcestrike.match.rules.RoundRules.canStartCountdown(match.getState())) {
             player.sendMessage("§c[DFS] 只有等待/倒计时阶段可以选队。");
             return false;
         }
@@ -1010,7 +1010,8 @@ public class MatchManager {
             }
             return false;
         }
-        if (match.getScoreT() != match.getScoreCT()) {
+        if (!org.starset.deltaforcestrike.match.rules.RoundRules.canEnterOvertime(
+                endWindowActive, match.getState(), match.getScoreT(), match.getScoreCT())) {
             if (admin != null) {
                 admin.sendMessage("§c[DFS] 只有平局才能进入加时赛。");
             }

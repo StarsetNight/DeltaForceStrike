@@ -175,7 +175,7 @@ public final class TournamentService {
         }
     }
 
-    private static int compareVer(String a, String b) {
+    static int compareVer(String a, String b) {
         String[] as = a.split("\\.");
         String[] bs = b.split("\\.");
         int len = Math.max(as.length, bs.length);

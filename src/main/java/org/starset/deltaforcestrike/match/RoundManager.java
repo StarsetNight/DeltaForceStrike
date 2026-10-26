@@ -72,18 +72,15 @@ public class RoundManager {
         int maxRounds = maxRounds();
         int halfRound = halfRound();
 
-        if (match.getScoreT() >= winTarget
-                || match.getScoreCT() >= winTarget
-                || match.getCurrentRound() >= maxRounds) {
+        if (org.starset.deltaforcestrike.match.rules.RoundRules.matchFinished(
+                match.getScoreT(), match.getScoreCT(), match.getCurrentRound(), winTarget, maxRounds)) {
             endMatchByScore();
             return;
         }
 
-        if (!halfTimeSwapped
-                && match.getCurrentRound() >= halfRound
-                && match.getCurrentRound() < maxRounds
-                && match.getScoreT() < winTarget
-                && match.getScoreCT() < winTarget) {
+        if (org.starset.deltaforcestrike.match.rules.RoundRules.shouldSwap(
+                halfTimeSwapped, match.getCurrentRound(), halfRound, maxRounds,
+                match.getScoreT(), match.getScoreCT(), winTarget)) {
             doHalfTimeSwap(halfRound);
         }
 
@@ -400,6 +397,7 @@ public class RoundManager {
                     maxHp = Math.max(1.0, attr.getValue());
                 }
             } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Snapshot max health lookup failed for " + p.getUniqueId(), ignored);
             }
             double hp = entry.health;
             if (Double.isNaN(hp) || hp < 0) {
@@ -409,7 +407,9 @@ public class RoundManager {
             }
             p.setHealth(hp);
             p.setFoodLevel(entry.food);
-            try { p.setSaturation(entry.saturation); } catch (Throwable ignored) {}
+            try { p.setSaturation(entry.saturation); } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Snapshot saturation restore failed for " + p.getUniqueId(), ignored);
+            }
             for (var pe : p.getActivePotionEffects()) p.removePotionEffect(pe.getType());
             if (entry.potionEffects != null) {
                 for (var e : entry.potionEffects) p.addPotionEffect(e);
@@ -417,7 +417,9 @@ public class RoundManager {
             p.getInventory().setContents(entry.contents);
             p.getInventory().setArmorContents(entry.armor);
             p.getInventory().setItemInOffHand(entry.offHand);
-            try { p.getInventory().setHeldItemSlot(entry.heldSlot); } catch (Throwable ignored) {}
+            try { p.getInventory().setHeldItemSlot(entry.heldSlot); } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Snapshot held slot restore failed for " + p.getUniqueId(), ignored);
+            }
 
             if (entry.world != null
                     && entry.world.equalsIgnoreCase(
@@ -540,10 +542,12 @@ public class RoundManager {
                 plugin.getSpectatorLockService().clear(p);
             }
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Spectator lock cleanup failed for " + p.getUniqueId(), ignored);
         }
         try {
             p.setSpectatorTarget(null);
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Spectator target cleanup failed for " + p.getUniqueId(), ignored);
         }
         if (p.getGameMode() != GameMode.ADVENTURE) {
             p.setGameMode(GameMode.ADVENTURE);
@@ -554,6 +558,7 @@ public class RoundManager {
             p.setFlySpeed(0.1f);
             p.setWalkSpeed(0.2f);
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Movement speed reset failed for " + p.getUniqueId(), ignored);
         }
         p.setFireTicks(0);
         p.setVelocity(new Vector(0, 0, 0));
@@ -681,7 +686,7 @@ public class RoundManager {
     }
 
     public void onBombPlanted() {
-        if (state != RoundState.COMBAT) {
+        if (!org.starset.deltaforcestrike.match.rules.RoundRules.canPlant(state)) {
             return;
         }
         cancel();
@@ -724,7 +729,7 @@ public class RoundManager {
     }
 
     public void endRound(Team winner, String reason, WinType winType) {
-        if (state == RoundState.ROUND_END || state == RoundState.IDLE) {
+        if (!org.starset.deltaforcestrike.match.rules.RoundRules.canEndRound(state)) {
             return;
         }
         cancel();
@@ -809,28 +814,25 @@ public class RoundManager {
         if (defeat.isEmpty()) {
             defeat = List.of(2000, 2550, 3100);
         }
-        // 手枪局只认正赛第 1 回合：加时赛从 round 0 重新计数，不能再吃手枪局补偿
-        boolean pistolRound = match.getCurrentRound() == 1 && !match.isOvertime();
         int pistol = plugin.getConfig().getInt("economy.pistol-round-bonus", 2550);
 
         for (PlayerSession s : match.getSessions().values()) {
             if (!s.hasTeam()) {
                 continue;
             }
+            var settlement = org.starset.deltaforcestrike.match.rules.EconomyRules.settle(
+                    s.getTeam() == winner, s.getTeam() == Team.T, bombPlantedThisRound,
+                    match.getCurrentRound(), match.isOvertime(), s.getConsecutiveLosses(),
+                    winMoney, defeat, pistol, plantedBonus);
             if (s.getTeam() == winner) {
-                s.addMoney(winMoney);
-                s.setConsecutiveLosses(0);
+                s.addMoney(settlement.reward());
+                s.setConsecutiveLosses(settlement.consecutiveLosses());
             } else {
-                int losses = s.getConsecutiveLosses() + 1;
-                s.setConsecutiveLosses(losses);
-                if (pistolRound) {
-                    s.addMoney(pistol);
-                } else {
-                    s.addMoney(defeat.get(Math.min(losses - 1, defeat.size() - 1)));
-                }
-                // T 已下包但输掉回合：整队额外 +800（CS 规则）
+                s.setConsecutiveLosses(settlement.consecutiveLosses());
+                s.addMoney(settlement.reward());
+                // 单独入账以保持原有上限钳制顺序（包括自定义负奖励）。
                 if (bombPlantedThisRound && s.getTeam() == Team.T) {
-                    s.addMoney(plantedBonus);
+                    s.addMoney(settlement.plantedReward());
                 }
             }
         }
