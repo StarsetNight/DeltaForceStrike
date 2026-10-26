@@ -52,6 +52,7 @@ public record PotionSpec(PotionEffectType type, int amplifier, boolean ambient) 
             try {
                 amp = Integer.parseInt(a.toString());
             } catch (NumberFormatException ignored) {
+                org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Invalid potion amplifier " + a + " for " + potionObj + "; using default 0", ignored);
             }
         }
         boolean ambient = true;
@@ -100,6 +101,7 @@ public record PotionSpec(PotionEffectType type, int amplifier, boolean ambient) 
                 return t;
             }
         } catch (Throwable ignored) {
+            org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Potion registry lookup failed for " + raw + "; trying Paper registry", ignored);
         }
 
         // 2) Paper RegistryAccess（部分 1.21+ 构建）
@@ -112,6 +114,7 @@ public record PotionSpec(PotionEffectType type, int amplifier, boolean ambient) 
                 return pet;
             }
         } catch (Throwable ignored) {
+            org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Paper potion registry lookup failed for " + raw + "; trying registry iteration", ignored);
         }
 
         // 3) 遍历 Registry（最后手段）
@@ -123,6 +126,7 @@ public record PotionSpec(PotionEffectType type, int amplifier, boolean ambient) 
                 }
             }
         } catch (Throwable ignored) {
+            org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Potion registry iteration failed for " + raw, ignored);
         }
 
         return null;

@@ -255,6 +255,7 @@ public class SpectatorLockService {
         try {
             player.setSpectatorTarget(null);
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Spectator target cleanup failed for " + player.getUniqueId(), ignored);
         }
     }
 }

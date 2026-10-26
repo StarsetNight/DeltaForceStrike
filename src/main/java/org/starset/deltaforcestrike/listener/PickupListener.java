@@ -283,6 +283,7 @@ public class PickupListener implements Listener {
                 arrow.setPickupStatus(AbstractArrow.PickupStatus.DISALLOWED);
             }
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Arrow pickup restriction failed for player " + player.getUniqueId(), ignored);
         }
     }
 
@@ -323,6 +324,7 @@ public class PickupListener implements Listener {
         try {
             arrow.setPickupStatus(AbstractArrow.PickupStatus.DISALLOWED);
         } catch (Throwable ignored) {
+            org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Arrow pickup restriction failed for projectile " + arrow.getUniqueId(), ignored);
         }
     }
 

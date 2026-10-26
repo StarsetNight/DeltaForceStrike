@@ -142,6 +142,7 @@ public class OperatorSkillListener implements Listener {
                 try {
                     owner = plugin.getServer().getPlayer(UUID.fromString(raw));
                 } catch (IllegalArgumentException ignored) {
+                    plugin.getLogger().log(java.util.logging.Level.FINE, "Smoke projectile owner UUID lookup failed for " + raw, ignored);
                 }
             }
         }

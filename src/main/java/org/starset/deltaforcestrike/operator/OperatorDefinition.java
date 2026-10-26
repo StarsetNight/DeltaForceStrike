@@ -31,6 +31,7 @@ public final class OperatorDefinition {
         try {
             type = OperatorType.valueOf(sec.getString("type", "ASSAULT").toUpperCase());
         } catch (Exception ignored) {
+            org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.WARNING, "Invalid operator type " + sec.getString("type", "ASSAULT") + " for " + id + "; using ASSAULT", ignored);
         }
         return new OperatorDefinition(
                 id,

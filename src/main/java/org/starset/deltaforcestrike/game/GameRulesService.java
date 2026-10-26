@@ -86,6 +86,7 @@ public final class GameRulesService {
                 maxHealth = max.getValue();
             }
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Maximum health lookup failed for " + player.getUniqueId(), ignored);
         }
         player.setHealth(Math.max(1.0, maxHealth));
     }

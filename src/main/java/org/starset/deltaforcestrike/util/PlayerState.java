@@ -55,6 +55,7 @@ public final class PlayerState {
         try {
             player.setAbsorptionAmount(0);
         } catch (Throwable ignored) {
+            org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Absorption reset failed for " + player.getUniqueId(), ignored);
         }
     }
 

@@ -210,6 +210,7 @@ public class MatchManager {
             }
             player.setSpectatorTarget(null);
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Queue spectator cleanup failed for " + player.getUniqueId(), ignored);
         }
         player.closeInventory();
         PlayerState.resetAll(player);
@@ -307,6 +308,7 @@ public class MatchManager {
                 try {
                     DeathDrops.dropAndClearLoadout(player);
                 } catch (Throwable ignored) {
+                    plugin.getLogger().log(java.util.logging.Level.FINE, "Disconnect loadout drop failed for " + player.getUniqueId(), ignored);
                 }
                 if (session.markDeathCounted()) {
                     session.addDeath();
@@ -385,6 +387,7 @@ public class MatchManager {
                 }
                 player.setSpectatorTarget(null);
             } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Reconnect spectator cleanup failed for " + player.getUniqueId(), ignored);
             }
             player.setGameMode(GameMode.ADVENTURE);
             player.setFlying(false);
@@ -1349,10 +1352,12 @@ public class MatchManager {
                 plugin.getSpectatorLockService().clear(player);
             }
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Spectator lock cleanup failed for " + player.getUniqueId(), ignored);
         }
         try {
             player.setSpectatorTarget(null);
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Spectator target cleanup failed for " + player.getUniqueId(), ignored);
         }
     }
 

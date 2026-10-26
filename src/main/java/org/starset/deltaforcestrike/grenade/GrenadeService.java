@@ -55,6 +55,7 @@ public class GrenadeService {
             try {
                 t.cancel();
             } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Grenade round effect task cancellation failed for " + t, ignored);
             }
         }
         activeEffectTasks.clear();

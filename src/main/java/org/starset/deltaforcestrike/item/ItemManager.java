@@ -427,6 +427,7 @@ public class ItemManager {
             try {
                 meta.removeAttributeModifier(armorAttr);
             } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Armor modifier cleanup failed for " + def.getId() + "/" + material, ignored);
             }
             AttributeModifier armorMod = createModifier(
                     new NamespacedKey(plugin, "dfs_armor_" + safeKey(def.getId()) + "_" + material.name().toLowerCase(Locale.ROOT)),
@@ -448,6 +449,7 @@ public class ItemManager {
             try {
                 meta.removeAttributeModifier(toughAttr);
             } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Armor toughness modifier cleanup failed for " + def.getId() + "/" + material, ignored);
             }
             AttributeModifier toughMod = createModifier(
                     new NamespacedKey(plugin, "dfs_tough_" + safeKey(def.getId())),
@@ -468,6 +470,7 @@ public class ItemManager {
         try {
             meta.removeItemFlags(ItemFlag.HIDE_ATTRIBUTES);
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Armor attribute visibility update failed for " + def.getId() + "/" + material, ignored);
         }
         stack.setItemMeta(meta);
     }
@@ -633,6 +636,7 @@ public class ItemManager {
         try {
             meta.removeAttributeModifier(attr);
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Main hand modifier cleanup failed for " + def.getId() + "/" + namePrefix, ignored);
         }
         NamespacedKey key = new NamespacedKey(plugin, namePrefix + "_" + safeKey(def.getId()));
         AttributeModifier mod = createModifier(
@@ -648,6 +652,7 @@ public class ItemManager {
             try {
                 meta.removeItemFlags(ItemFlag.HIDE_ATTRIBUTES);
             } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Main hand attribute visibility update failed for " + def.getId() + "/" + namePrefix, ignored);
             }
             stack.setItemMeta(meta);
         } catch (Throwable t) {
@@ -691,6 +696,7 @@ public class ItemManager {
                 return a;
             }
         } catch (Throwable ignored) {
+            org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Modern attribute field lookup failed for " + modernField, ignored);
         }
         try {
             var reg = RegistryAccess.registryAccess()
@@ -704,6 +710,7 @@ public class ItemManager {
                 return a;
             }
         } catch (Throwable ignored) {
+            org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Attribute registry lookup failed for " + modernKey + "/" + legacyKey, ignored);
         }
         try {
             Object v = Attribute.class.getField(legacyField).get(null);
@@ -711,6 +718,7 @@ public class ItemManager {
                 return a;
             }
         } catch (Throwable ignored) {
+            org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Legacy attribute field lookup failed for " + legacyField, ignored);
         }
         return null;
     }
@@ -742,6 +750,7 @@ public class ItemManager {
             stack.setItemMeta(meta);
             return;
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Custom durability API failed for " + def.getId() + "; using material durability fallback", ignored);
         }
         // 兼容：用已损值模拟「只剩 want 点」
         int typeMax = stack.getType().getMaxDurability();

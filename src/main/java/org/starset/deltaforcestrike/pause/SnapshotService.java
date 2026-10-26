@@ -170,6 +170,7 @@ public final class SnapshotService {
         try {
             p.getInventory().setHeldItemSlot(e.heldSlot);
         } catch (Throwable ignored) {
+            plugin.getLogger().log(java.util.logging.Level.FINE, "Pending snapshot held slot restore failed for " + p.getUniqueId(), ignored);
         }
         p.updateInventory();
         p.sendMessage("§6[DFS] 已恢复回滚前快照的库存。");

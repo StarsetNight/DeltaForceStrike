@@ -134,6 +134,7 @@ public final class TeamSelectUI {
         try {
             meta.setMaxStackSize(1);
         } catch (Throwable ignored) {
+            org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Team selection book stack size update failed for " + BOOK_ID, ignored);
         }
         book.setItemMeta(meta);
         return book;

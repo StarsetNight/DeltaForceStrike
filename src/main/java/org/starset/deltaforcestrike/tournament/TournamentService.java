@@ -134,6 +134,7 @@ public final class TournamentService {
                     return new String(body, StandardCharsets.UTF_8).trim();
                 }
             } catch (Throwable ignored) {
+                org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Length-prefixed tournament payload decode failed for " + data.length + " bytes; trying plain text", ignored);
             }
         }
         // 纯文本
@@ -158,6 +159,7 @@ public final class TournamentService {
             out.write(bytes);
             out.flush();
         } catch (Throwable ignored) {
+            org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Tournament response encoding failed for " + bytes.length + " bytes", ignored);
         }
         return baos.toByteArray();
     }

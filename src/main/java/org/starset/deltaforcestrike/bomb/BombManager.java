@@ -528,6 +528,7 @@ public class BombManager {
                         double kbScale = Math.max(0.25, 1.0 - dist / radius);
                         p.setVelocity(knock.multiply(1.5 * kbScale).setY(0.35 + 0.4 * kbScale));
                     } catch (Throwable ignored) {
+                        plugin.getLogger().log(java.util.logging.Level.FINE, "Bomb explosion knockback failed for " + p.getUniqueId(), ignored);
                     }
                     p.setFallDistance(0f);
                 }
@@ -687,6 +688,7 @@ public class BombManager {
             try {
                 player.hideBossBar(bar);
             } catch (Exception ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Bomb channel boss bar cleanup failed for " + id, ignored);
             }
         }
         channelStates.remove(id);

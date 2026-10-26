@@ -196,6 +196,7 @@ public class NametagService {
             try {
                 team.removeEntry(e);
             } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Nametag entry cleanup failed for " + e + " in team " + team.getName(), ignored);
             }
         }
     }

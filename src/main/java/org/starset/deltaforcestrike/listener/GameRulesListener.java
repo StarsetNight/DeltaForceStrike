@@ -302,6 +302,7 @@ public class GameRulesListener implements Listener {
             try {
                 killer.playSound(killer.getLocation(), Sound.ENTITY_ITEM_BREAK, 1f, 1f);
             } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Weapon break sound failed for " + killer.getUniqueId(), ignored);
             }
             return;
         }

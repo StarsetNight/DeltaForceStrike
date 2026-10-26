@@ -170,6 +170,7 @@ public final class SkillDefinition {
             try {
                 return Integer.parseInt(v.toString().trim());
             } catch (NumberFormatException ignored) {
+                org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Invalid integer skill parameter " + key + "=" + v + " for " + id + "; using default " + def, ignored);
             }
         }
         return def;
@@ -184,6 +185,7 @@ public final class SkillDefinition {
             try {
                 return Double.parseDouble(v.toString().trim());
             } catch (NumberFormatException ignored) {
+                org.bukkit.Bukkit.getLogger().log(java.util.logging.Level.FINE, "Invalid decimal skill parameter " + key + "=" + v + " for " + id + "; using default " + def, ignored);
             }
         }
         return def;

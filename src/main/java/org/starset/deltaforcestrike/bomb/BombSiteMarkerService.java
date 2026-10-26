@@ -169,10 +169,12 @@ public final class BombSiteMarkerService {
                 try {
                     d.setAlignment(TextDisplay.TextAlignment.CENTER);
                 } catch (Throwable ignored) {
+                    plugin.getLogger().log(java.util.logging.Level.FINE, "Bomb site marker alignment failed for " + key, ignored);
                 }
                 try {
                     d.setLineWidth(200);
                 } catch (Throwable ignored) {
+                    plugin.getLogger().log(java.util.logging.Level.FINE, "Bomb site marker line width failed for " + key, ignored);
                 }
                 // persistent=true 避免区块卸载后 ensure 反复补刷叠实体
                 d.setPersistent(true);
@@ -213,6 +215,7 @@ public final class BombSiteMarkerService {
             try {
                 td.text(text);
             } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Bomb site marker text update failed for " + site.id(), ignored);
             }
         } else {
             try {
@@ -221,6 +224,7 @@ public final class BombSiteMarkerService {
                         NamedTextColor.RED, TextDecoration.BOLD));
                 e.setCustomNameVisible(true);
             } catch (Throwable ignored) {
+                plugin.getLogger().log(java.util.logging.Level.FINE, "Bomb site marker name update failed for " + site.id(), ignored);
             }
         }
     }
